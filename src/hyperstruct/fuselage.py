@@ -10,6 +10,8 @@ from dataclasses import field
 
 import numpy as np
 
+from hyperstruct import Material
+
 
 @dataclass
 class Cover:
@@ -53,13 +55,18 @@ class Cover:
         default=0,
         metadata={"description": "area moment of inertia of the bending elements"},
     )
-    C_r: float = field(
-        default=0.75,
-        metadata={
-            "description": "Assuming a design practice of rivet spacing four diameters apart, \
-            degradation due to this hole spacing is represented by this rivet factor."
-        },
-    )
+
+    @property
+    def c_r(self) -> float:
+        """Rivet Factor.
+
+        Assuming a design practice of rivet spacing four diameters apart,
+        degradation due to this hole spacing is represented by this rivet factor.
+
+        For milled panels the fastener hole degradation is assumed to be accounted for,
+        and this factor is set to 1.0.
+        """
+        return 1.0 if self.milled else 0.75
 
     @property
     def q(self):
@@ -72,16 +79,37 @@ class Cover:
         return self.V * self.Q / self.I
 
     @property
-    def zee(self):
-        """Panel buckling parameter for shear buckling coefficient."""
+    def zee(self) -> float:
+        """Panel buckling geometry parameter for shear buckling coefficient."""
         b = min(self.D, self.L)
         frac = b**2 / (self.RC * self.t_c)
         # Note, ADA002867 uses lowercase greek mu, but confirms that it is Poisson's Ratio.
         root = np.sqrt(1 - self.material.nu**2)
         return frac * root
 
-    def min_thickness_block_shear(self) -> None:
-        """Evaluate the min thickness requires tos atisfy block shear strength."""
+    @property
+    def k_s(self) -> float:
+        """Shear buckling coefficient.
+
+        Reference curves are displayed in ADA002867, Fig. 12.
+        Coefficients are parameterized here based on curvature and geometry parameter zee.
+        """
+        z = self.zee
+        if (self.RC > 1000) or (self.RC == 0):
+            # Panel has no curvature. Flat panels are assumed to be a 7.5
+            return 7.5
+        elif z < 2:
+            return 7.5
+        elif 2 < z < 10:
+            return 7.5 * (z / 2) ** 0.113
+        elif 10 < z:
+            return 9 * (z / 10) ** 0.522
+
+    def field_thickness_block_shear(self) -> float:
+        """Field thickness based on shear flow.
+
+        Evaluate the min thickness required to satisfy block shear strength.
+        """
         if self.milled:
             t_c = self.q / self.material.F_su
         else:
