@@ -1,0 +1,16 @@
+{
+  "_checkout": "2022.6.3",
+  "_output_dir": "C:\\Users\\Czarified\\Documents\\GitHub",
+  "_repo_dir": "C:\\Users\\Czarified\\.cookiecutters\\cookiecutter-hypermodern-python",
+  "_template": "gh:cjolowicz/cookiecutter-hypermodern-python",
+  "author": "Benjamin Crews",
+  "copyright_year": "2024",
+  "development_status": "Development Status :: 1 - Planning",
+  "email": "aceF22@gmail.com",
+  "friendly_name": "Hyperstruct",
+  "github_user": "czarified",
+  "license": "MIT",
+  "package_name": "hyperstruct",
+  "project_name": "hyperstruct",
+  "version": "0.0.0"
+}
