@@ -115,10 +115,13 @@ class Cover:
 
         return t_c
 
-    def field_thickness_postbuckled(self) -> float:
+    def field_thickness_postbuckled(self, alpha: float = 45) -> float:
         """Field thickness based on critical shear flow.
 
         Evaluate the min thickness required to satisfy post-buckled strength.
+        Postbuckled strength assumes sizing covers with diagonal tension. The
+        diagonal tension angle is unknown because intermediate frame and
+        stringer sizing is not known. An initial estimate of 45 degrees is used.
         """
         F_scr = (
             self.k_s
@@ -127,3 +130,45 @@ class Cover:
             / (12 * (1 - self.material.nu**2))
             * (self.t_c / min(self.D, self.L)) ** 2
         )
+        if F_scr > self.material.F_su:
+            # Skin is not critical in stability.
+            return self.t_c
+        else:
+            # Skin must be sized for postbuckled strength.
+            K_1 = (
+                self.k_s
+                * np.pi**2
+                * self.material.E
+                / (12 * (1 - self.material.nu) ** 2 * min(self.D, self.L))
+            )
+            K_2 = (
+                self.c_r
+                * self.material.F_tu
+                * np.sin(np.radians(alpha))
+                * np.cos(np.radians(alpha))
+                / (1 - np.sin(np.radians(alpha)) * np.cos(np.radians(alpha)))
+            )
+            K_3 = self.q / (1 - np.sin(np.radians(alpha)) * np.cos(np.radians(alpha)))
+
+            t_c = (
+                K_3 / (2 * K_1)
+                + np.sqrt((K_3 / (2 * K_1)) ** 2 + (K_2 / (3 * K_1)) ** 3)
+            ) ** (1 / 3) - (
+                np.sqrt((K_3 / (2 * K_1)) ** 2 + (K_2 / (3 * K_1)) ** 3)
+                - (K_3 / (2 * K_1))
+            ) ** (
+                1 / 3
+            )
+
+            return t_c
+
+    def land_thickness_net_section(self) -> float:
+        """Land thickness based on net section allowable.
+
+        On milled panels the land thickness is checked against the net section shear allowable.
+        On unmilled panels, the land thickness is simply equivalent to the field thickness.
+        """
+        if not self.milled:
+            return self.t_c
+        else:
+            return self.q / (self.c_r * self.material.F_su)
