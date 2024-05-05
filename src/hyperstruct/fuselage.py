@@ -6,7 +6,6 @@ This file contains all global variables, classes, and functions related to fusel
 """
 
 from dataclasses import dataclass
-from dataclasses import field
 
 import numpy as np
 
@@ -19,42 +18,41 @@ class Cover:
 
     The Fuselage Cover components (aka Skins) are evalutated
     for sufficient thickness to satisfy strength, flutter,
-    acoustic fatigue, and minium thickness. Should the shell section
+    acoustic fatigue, and minimum thickness. Should the shell section
     be pressurized or contain fuel, they are evaluated for pressure requirements.
     The cover sizing procedure starts at minimum thicknesses and proceeds
-    through a systematic check fo the different criteria.
+    through a systematic check for the different criteria.
     """
 
-    material: Material = field(
-        metadata={"description": "material the cover is made of"}
-    )
-    milled: bool = field(
-        default=False,
-        metadata={
-            "description": "if panel is to be milled for different field vs land thicknesses."
-        },
-    )
-    L: float = field(default=0, metadata={"description": "frame spacing"})
-    D: float = field(
-        default=0, metadata={"description": "stringer spacing or panel size"}
-    )
-    t_l: float = field(
-        default=0, metadata={"description": "land, or edgeband, thickness"}
-    )
-    t_c: float = field(
-        default=0, metadata={"description": "field, or acreage, thickness"}
-    )
-    RC: float = field(default=0, metadata={"description": "radius of curvature"})
-    V: float = field(
-        default=0, metadata={"description": "total vertical shear at the cut"}
-    )
-    Q: float = field(
-        default=0, metadata={"description": "area moment of the bending elements"}
-    )
-    I: float = field(
-        default=0,
-        metadata={"description": "area moment of inertia of the bending elements"},
-    )
+    material: Material
+    """material the cover is made of."""
+
+    milled: bool
+    """if panel is to be milled for different field vs land thicknesses."""
+
+    L: float
+    """frame spacing."""
+
+    D: float
+    """stringer spacing or panel size."""
+
+    t_l: float = 0
+    """land, or edgeband, thickness."""
+
+    t_c: float = 0
+    """field, or acreage, thickness."""
+
+    RC: float = 0
+    """radius of curvature."""
+
+    V: float = 0
+    """total vertical shear at the cut."""
+
+    Q: float = 0
+    """area moment of the bending elements."""
+
+    I: float = 0
+    """area moment of inertia of the bending elements."""
 
     @property
     def c_r(self) -> float:
@@ -106,7 +104,7 @@ class Cover:
             return 9 * (z / 10) ** 0.522
 
     def field_thickness_block_shear(self) -> float:
-        """Field thickness based on shear flow.
+        """Field thickness based on shear strength.
 
         Evaluate the min thickness required to satisfy block shear strength.
         """
@@ -116,3 +114,16 @@ class Cover:
             t_c = self.q / (self.C_r * self.material.F_su)
 
         return t_c
+
+    def field_thickness_postbuckled(self) -> float:
+        """Field thickness based on critical shear flow.
+
+        Evaluate the min thickness required to satisfy post-buckled strength.
+        """
+        F_scr = (
+            self.k_s
+            * np.pi**2
+            * self.material.E
+            / (12 * (1 - self.material.nu**2))
+            * (self.t_c / min(self.D, self.L)) ** 2
+        )
