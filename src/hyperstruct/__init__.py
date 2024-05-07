@@ -1,6 +1,7 @@
 """Hyperstruct."""
 
 from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
@@ -37,3 +38,29 @@ class Material:
 
     F_bry: float
     """Bearing yield strength."""
+
+
+@dataclass
+class Component:
+    """The basic foundation for sizing.
+
+    An Aircraft is composed of different Assemblies, which contain various Components.
+    Components have several base methods and attributes that enable sizing and
+    weights estimation.
+
+    The crucial attribute of a Component is the `routines`. This List type contains
+    all the methods that must be iterated over to arrive at a converged set of
+    dimensions, and therefore weight.
+    """
+
+    routines: List
+
+    def sizing(self) -> None:
+        """The sizing method.
+
+        The sizing method collects all sizing routines and executes them
+        in the order of the `routines` list.
+        """
+        # This doesn't work. It's just a placeholder.
+        for _routine in self.routines:
+            pass
