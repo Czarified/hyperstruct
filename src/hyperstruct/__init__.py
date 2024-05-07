@@ -47,15 +47,11 @@ class Component:
     An Aircraft is composed of different Assemblies, which contain various Components.
     Components have several base methods and attributes that enable sizing and
     weights estimation.
-
-    The crucial attribute of a Component is the `routines`. This List type contains
-    all the methods that must be iterated over to arrive at a converged set of
-    dimensions, and therefore weight.
     """
 
     routines: List
 
-    def sizing(self) -> None:
+    def synthesis(self) -> None:
         """The sizing method.
 
         The sizing method collects all sizing routines and executes them

@@ -10,10 +10,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from hyperstruct import Material
+from hyperstruct import Component
 
 
 @dataclass
-class Cover:
+class Cover(Component):
     """Fuselage Cover component.
 
     The Fuselage Cover components (aka Skins) are evalutated
@@ -35,6 +36,9 @@ class Cover:
 
     D: float
     """stringer spacing or panel size."""
+
+    R: float
+    """distance from the CG to the synthesis cut."""
 
     t_l: float = 0
     """land, or edgeband, thickness."""
@@ -172,3 +176,28 @@ class Cover:
             return self.t_c
         else:
             return self.q / (self.c_r * self.material.F_su)
+        
+    def land_thickness_pressure(self) -> float:
+        """Land thickness based on cover pressure.
+
+        A required thickness is evaluated to resist hoop stress,
+        and then bending diaphram stress via strip theory. The
+        minimum of these values is returned as the required land thickness.
+        """
+        b = min(self.D, self.L)
+        # TODO: Lookup the vehicle-level load factors for the CG
+        Nz_plus = 6
+        Nz_minus = -3
+        # TODO: Lookup the vehicle-level pitch accelerations
+        # Assume the pitch acceleration units are radians per second per second
+        Q_dot = 6.9
+        # 386.0886 [in/s2] is the gravitational acceleration
+        Nz_1 = Nz_plus + Q_dot*self.R*386.0886
+        Nz_2 = Nz_minus + Q_dot*self.R*386.0886
+        # TODO: Lookup the fluid density from the vehicle
+        # 7.01 [lbs/gal] is roughly the density of JP-8
+        rho = 7.01
+        P_1 = P_o + rho*Nz_1*h
+        P_2 = P_o + rho*Nz_2*h
+        # Simple Hoop Stress
+        t = P*self.RC/self.material.F_ty
