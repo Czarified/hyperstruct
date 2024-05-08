@@ -9,8 +9,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from hyperstruct import Material
 from hyperstruct import Component
+from hyperstruct import Material
 
 
 @dataclass
@@ -176,7 +176,7 @@ class Cover(Component):
             return self.t_c
         else:
             return self.q / (self.c_r * self.material.F_su)
-        
+
     def land_thickness_pressure(self) -> float:
         """Land thickness based on cover pressure.
 
@@ -185,19 +185,46 @@ class Cover(Component):
         minimum of these values is returned as the required land thickness.
         """
         b = min(self.D, self.L)
+
         # TODO: Lookup the vehicle-level load factors for the CG
         Nz_plus = 6
         Nz_minus = -3
+
         # TODO: Lookup the vehicle-level pitch accelerations
         # Assume the pitch acceleration units are radians per second per second
         Q_dot = 6.9
+
         # 386.0886 [in/s2] is the gravitational acceleration
-        Nz_1 = Nz_plus + Q_dot*self.R*386.0886
-        Nz_2 = Nz_minus + Q_dot*self.R*386.0886
+        Nz_1 = Nz_plus + Q_dot * self.R * 386.0886
+        Nz_2 = Nz_minus + Q_dot * self.R * 386.0886
+
         # TODO: Lookup the fluid density from the vehicle
         # 7.01 [lbs/gal] is roughly the density of JP-8
         rho = 7.01
-        P_1 = P_o + rho*Nz_1*h
-        P_2 = P_o + rho*Nz_2*h
+
+        # TODO: Lookup the vent space pressure (atmosphere?) based on the flight condition
+        # 14.7 [psi] is the atmospheric pressure at sea level.
+        P_o = 14.7
+
+        # TODO: Lookup the tank depth. Is every skin a "tank??"
+        h = b / 4
+
+        P_1 = P_o + rho * Nz_1 * h
+        P_2 = P_o + rho * Nz_2 * h
+
         # Simple Hoop Stress
-        t = P*self.RC/self.material.F_ty
+        t_1 = P_1 * self.RC / self.material.F_ty
+        t_2 = P_2 * self.RC / self.material.F_ty
+
+        # Strip Theory Edge thickness
+        t_3 = (
+            1.646 * b * P_1**0.894 * self.material.E**0.394
+        ) / self.material.F_ty**1.288
+        # Strip Theory Midspan thickness
+        t_4 = (
+            self.material.E**1.984
+            * (1.3769 * b * P_1**2.484)
+            / self.material.F_ty**4.467
+        )
+
+        return min(t_1, t_2, t_3, t_4)
