@@ -6,6 +6,7 @@ This file contains all global variables, classes, and functions related to fusel
 """
 
 from dataclasses import dataclass
+from typing import Tuple
 
 import numpy as np
 
@@ -177,8 +178,8 @@ class Cover(Component):
         else:
             return self.q / (self.c_r * self.material.F_su)
 
-    def land_thickness_pressure(self, F_allow=None) -> float:
-        """Land thickness based on cover pressure.
+    def thickness_pressure(self, F_allow=None) -> Tuple[float, float]:
+        """Thicknesses based on cover pressure.
 
         A required thickness is evaluated to resist hoop stress,
         and then bending diaphram stress via strip theory. The
@@ -190,6 +191,8 @@ class Cover(Component):
         tensile strength. The pre=programmed allowable represents a change
         from zero to peak pressure 20,000 times during the vehicle's useful
         life, with a stress concentration factor of 4.0.
+
+        Returns: (t_l, t_c)
         """
         b = min(self.D, self.L)
         if not F_allow:
@@ -231,4 +234,9 @@ class Cover(Component):
         # Strip Theory Midspan thickness
         t_4 = self.material.E**1.984 * (1.3769 * b * P_1**2.484) / F_allow**4.467
 
-        return min(t_1, t_2, t_3, t_4)
+        t_min = min(t_1, t_2, t_3, t_4)
+
+        if self.milled:
+            return (t_3, t_min)
+        else:
+            return (t_min, t_min)
