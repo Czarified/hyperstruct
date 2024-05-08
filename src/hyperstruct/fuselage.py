@@ -177,14 +177,23 @@ class Cover(Component):
         else:
             return self.q / (self.c_r * self.material.F_su)
 
-    def land_thickness_pressure(self) -> float:
+    def land_thickness_pressure(self, F_allow=None) -> float:
         """Land thickness based on cover pressure.
 
         A required thickness is evaluated to resist hoop stress,
         and then bending diaphram stress via strip theory. The
         minimum of these values is returned as the required land thickness.
+
+        Cabin pressurization is a cyclic occurrence that subjects the cover
+        to possible fatigue failure. The maximum allowable stress to prevent
+        fatigue is represented as a fraction of the material ultimate
+        tensile strength. The pre=programmed allowable represents a change
+        from zero to peak pressure 20,000 times during the vehicle's useful
+        life, with a stress concentration factor of 4.0.
         """
         b = min(self.D, self.L)
+        if not F_allow:
+            F_allow = self.material.F_ty / 4.0
 
         # TODO: Lookup the vehicle-level load factors for the CG
         Nz_plus = 6
@@ -199,6 +208,7 @@ class Cover(Component):
         Nz_2 = Nz_minus + Q_dot * self.R * 386.0886
 
         # TODO: Lookup the fluid density from the vehicle
+        #       Should this default to air for cabin fluid?
         # 7.01 [lbs/gal] is roughly the density of JP-8
         rho = 7.01
 
@@ -213,18 +223,12 @@ class Cover(Component):
         P_2 = P_o + rho * Nz_2 * h
 
         # Simple Hoop Stress
-        t_1 = P_1 * self.RC / self.material.F_ty
-        t_2 = P_2 * self.RC / self.material.F_ty
+        t_1 = P_1 * self.RC / F_allow
+        t_2 = P_2 * self.RC / F_allow
 
         # Strip Theory Edge thickness
-        t_3 = (
-            1.646 * b * P_1**0.894 * self.material.E**0.394
-        ) / self.material.F_ty**1.288
+        t_3 = (1.646 * b * P_1**0.894 * self.material.E**0.394) / F_allow**1.288
         # Strip Theory Midspan thickness
-        t_4 = (
-            self.material.E**1.984
-            * (1.3769 * b * P_1**2.484)
-            / self.material.F_ty**4.467
-        )
+        t_4 = self.material.E**1.984 * (1.3769 * b * P_1**2.484) / F_allow**4.467
 
         return min(t_1, t_2, t_3, t_4)
