@@ -240,3 +240,59 @@ class Cover(Component):
             return (t_3, t_min)
         else:
             return (t_min, t_min)
+
+    def panel_flutter(self, mach: float, altitude: float) -> float:
+        """Evaluate baseline thickness to avoid local panel flutter.
+
+        The baseline thickness to make local panel flutter highly improbable
+        is a function of dynamic pressure, Mach number, geometry, and material.
+        Curve-fits for each variable are utilized, with a baseline thickness
+        value returned.
+
+        To find the final required thickness, this method must be looped
+        over for all Mach and altitudes corresponding to the flight
+        envelope conditions of the aircraft.
+        """
+        # Dynamic pressures based on standard day atmosphere.
+        # Dynamic Pressure, q, in [psf]
+        # Altitudes must be measured in [ft]
+        if altitude <= 20000:
+            q = mach**2 * (1479.757 - 52.187 * altitude + 0.619868 * altitude**2)
+        elif 20000 < altitude <= 70000:
+            q = mach**2 * (
+                1465.175
+                - 50.76695 * altitude
+                + 0.6434412 * altitude**2
+                - 0.002907194 * altitude**3
+            )
+        elif altitude > 70000:
+            q = mach**2 * (199.659 / altitude) ** 4
+
+        # Calculate the Mach Number Effect
+        # The Mach Number Effect, FM, is a 3 piece function from SWEEP.
+        # This function is more conservative than the AFRL baseline curve,
+        # but less conservative than the NACA curve. ADA002867, pg. 100.
+        if 1.0 <= mach < 1.4:
+            FM = 0.4851674 + 1.66456 * (mach - 1) ** 3
+        elif 1.4 <= mach <= 2.0:
+            FM = (
+                0.488412
+                - 0.4037203 * np.cos(np.pi * (mach - 1.4) / 0.6)
+                + 0.4849271 * np.sqrt(mach**2 - 1)
+            )
+        elif mach > 2.0:
+            FM = np.sqrt(mach**2 - 1)
+
+        # Length/Width parameter
+        LW = self.L / self.D
+        if LW > 10:
+            # These curves are not valid for ratios greater than 10.
+            # Panels with aspect ratios greater than 10 rarely exist.
+            LW = 10
+
+        # Panel Flutter Parameter, phi_B
+        phi_b = 0.5551841 - 0.1686944 * LW + 0.02169992 * LW**2 - 0.000963694 * LW**3
+
+        t_b = (phi_b * self.L) / (FM * self.material.E / q) ** (1 / 3)
+
+        return t_b
