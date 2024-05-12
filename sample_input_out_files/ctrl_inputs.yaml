@@ -1,0 +1,35 @@
+---
+# This is an example input file, see ADA002852, Table 4
+# for source documentation.
+air_vehicle_class: fighter
+wing_type: fixed
+vertical_tail_type: single
+load_calc_options: basic
+vehicle_load_calcs: all
+calc_fuselage_loads: true
+calc_wing_loads: true
+calc_horz_tail_loads: true
+calc_vert_tail_loads: true
+calc_pos_maneuver: true
+calc_neg_maneuver: true
+calc_flaps_down_maneuver: true
+calc_flaps_down_land: true
+calc_pos_vertical_gusts: true
+calc_neg_vertical_gusts: true
+calc_lateral_gusts: true
+calc_pitch_accel: true
+calc_yaw_accel: true
+wing_fatigue_spectra_calcs: all
+wing_construction: metal
+horz_tail_construction: metal
+vert_tail_construction: metal
+exec_airloads: true
+exec_wing_empennage: true
+exec_fuselage: true
+exec_landing_gear: true
+exec_horz_tail: true
+exec_vert_tail: true
+exec_air_induc_sys: true
+exec_fatigue: true
+exec_outputs: true
+modify_subsequent_cases: false

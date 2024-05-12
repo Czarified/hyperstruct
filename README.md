@@ -21,6 +21,21 @@
 [pre-commit]: https://github.com/pre-commit/pre-commit
 [black]: https://github.com/psf/black
 
+HyperStruct is a modern implementation of the SWEEP software originally
+produced by Rockwell International in 1974. The Structural Weight Estimation
+Program for Aircraft (SWEEP) was originally implemented in FORTRAN. The
+source code for this program is no longer publicly available, but
+the US Defence Technical Information Center has published all the original
+documentation from Rockwell (which is extensive).
+
+This project aims to meet the same objectives as SWEEP: devlop analytical
+computer programs capable of predicting the weight of aircraft structural
+components suitable for use during the conceptual phase of the aircraft
+design cycle. It builds a very high level of fidelity in the weight
+estimates, with flexiblity to a plethora of design variables. All of this
+is predominantly derived from fundamental structural methods, or historically
+predicated empirical formulas.
+
 ## Features
 
 - TODO
