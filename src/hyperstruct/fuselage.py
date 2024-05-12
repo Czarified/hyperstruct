@@ -296,3 +296,47 @@ class Cover(Component):
         t_b = (phi_b * self.L) / (FM * self.material.E / q) ** (1 / 3)
 
         return t_b
+
+    def acoustic_fatigue(self) -> Tuple[float, float]:
+        """Thickness requirements based on acoustic fatigue.
+
+        Assumptions are:
+            1.) The overall pressure level from jet engine noise is approximately
+                30db higher than the random spectrum pressure level.
+            2.) The accuracy of noise intensity prediction is on the order of +/-3db.
+            3.) Beam theory is sufficient for modelign the shell elements.
+            4.) The design to repetitive pressure intensity from jet engine noise
+                can be correlated tot he material endurance limit. Polished specimen
+                s-n data, K_t=1, is a sufficiently representative strength index.
+            5.) The method is based on a limited amount of testing.
+            6.) The method does not consider panel aspect ratio, and is, therefore,
+                conservative when aspect ratios approach 1.
+
+        The sound pressure level used is based on a material property. This value
+        provides the fatigue life of 10^9 cycles for the material. The overall
+        decibel level is then increased by 30, which represents jet noise instead
+        of a purely random spectrum.
+
+        Returns: (t_l, t_c)
+        """
+        # Random distribution acoustic level, that provides a material fatigue
+        # life of 10^9 cycles.
+        db_r = self.material.db_r
+        db_oa = db_r + 30
+        P = 2.9e-9 * 10 ** (db_oa / 20)
+        # Note: K_c is directly hardcoded to 2.62, per Fig. 20 of ADA002867
+        if self.milled:
+            t_l = 2.62 * self.D * np.sqrt(P / self.material.F_en)
+            t_c = 0.6 * t_l
+        else:
+            t_l = 2.62 * self.D * np.sqrt(P / self.material.F_en)
+            t_c = t_l
+
+        # Curvature correction
+        x_l = self.D**2 / (t_l * self.RC)
+        x_c = self.D**2 / (t_c * self.RC)
+        # Ratio of curved panel thickness over flat panel
+        f_l = 1.0794 + 0.000143 * x_l - 0.076475 * (1 / x_l) - 0.29969 * np.log(x_l)
+        f_c = 1.0794 + 0.000143 * x_c - 0.076475 * (1 / x_c) - 0.29969 * np.log(x_c)
+
+        return (f_l * t_l, f_c * t_c)

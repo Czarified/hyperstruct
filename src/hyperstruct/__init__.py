@@ -39,6 +39,12 @@ class Material:
     F_bry: float
     """Bearing yield strength."""
 
+    F_en: float
+    """Endurance limit."""
+
+    db_r: float
+    """Random spectrum decibel level that produces an acoustic fatigue life of 10^9."""
+
 
 @dataclass
 class Component:
