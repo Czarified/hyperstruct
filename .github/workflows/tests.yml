@@ -124,7 +124,7 @@ jobs:
 
       - name: Upgrade pip
         run: |
-          pip install --constraint=.github/workflows/constraints.txt pip
+          pip install --constraint=.github/workflows/constraints.txt pip "pipx==1.4.3"
           pip --version
 
       - name: Install Poetry
