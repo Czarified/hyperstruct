@@ -1,7 +1,6 @@
 """Hyperstruct."""
 
 from dataclasses import dataclass
-from typing import List
 
 
 @dataclass
@@ -55,8 +54,6 @@ class Component:
     weights estimation.
     """
 
-    routines: List
-
     def synthesis(self) -> None:
         """The sizing method.
 
@@ -64,5 +61,4 @@ class Component:
         in the order of the `routines` list.
         """
         # This doesn't work. It's just a placeholder.
-        for _routine in self.routines:
-            pass
+        pass
