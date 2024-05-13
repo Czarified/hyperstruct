@@ -4,11 +4,14 @@ on:
   push:
     branches:
       - main
-      - master
 
 jobs:
   labeler:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
@@ -16,4 +19,5 @@ jobs:
       - name: Run Labeler
         uses: crazy-max/ghaction-github-labeler@v5.0.0
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           skip-delete: true
