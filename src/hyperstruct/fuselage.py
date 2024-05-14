@@ -6,6 +6,7 @@ This file contains all global variables, classes, and functions related to fusel
 """
 
 from dataclasses import dataclass
+from typing import Any
 from typing import Tuple
 
 import numpy as np
@@ -72,7 +73,7 @@ class Cover(Component):
         return 1.0 if self.milled else 0.75
 
     @property
-    def q(self):
+    def q(self) -> float:
         """Evaluate the cover shear flow.
 
         Assuming the section masses are concentrated at the longerons
@@ -87,7 +88,7 @@ class Cover(Component):
         b = min(self.D, self.L)
         frac = b**2 / (self.RC * self.t_c)
         # Note, ADA002867 uses lowercase greek mu, but confirms that it is Poisson's Ratio.
-        root = np.sqrt(1 - self.material.nu**2)
+        root = float(np.sqrt(1 - self.material.nu**2))
         return frac * root
 
     @property
@@ -104,9 +105,11 @@ class Cover(Component):
         elif z < 2:
             return 7.5
         elif 2 < z < 10:
-            return 7.5 * (z / 2) ** 0.113
+            return float(7.5 * (z / 2) ** 0.113)
         elif 10 < z:
-            return 9 * (z / 10) ** 0.522
+            return float(9 * (z / 10) ** 0.522)
+        else:
+            raise NotImplementedError("I don't know how you got here...")
 
     def field_thickness_block_shear(self) -> float:
         """Field thickness based on shear strength.
@@ -116,9 +119,9 @@ class Cover(Component):
         if self.milled:
             t_c = self.q / self.material.F_su
         else:
-            t_c = self.q / (self.C_r * self.material.F_su)
+            t_c = self.q / (self.c_r * self.material.F_su)
 
-        return t_c
+        return float(t_c)
 
     def field_thickness_postbuckled(self, alpha: float = 45) -> float:
         """Field thickness based on critical shear flow.
@@ -165,7 +168,7 @@ class Cover(Component):
                 1 / 3
             )
 
-            return t_c
+            return float(t_c)
 
     def land_thickness_net_section(self) -> float:
         """Land thickness based on net section allowable.
@@ -174,11 +177,11 @@ class Cover(Component):
         On unmilled panels, the land thickness is simply equivalent to the field thickness.
         """
         if not self.milled:
-            return self.t_c
+            return float(self.t_c)
         else:
-            return self.q / (self.c_r * self.material.F_su)
+            return float(self.q / (self.c_r * self.material.F_su))
 
-    def thickness_pressure(self, F_allow=None) -> Tuple[float, float]:
+    def thickness_pressure(self, F_allow: Any = None) -> Tuple[float, float]:
         """Thicknesses based on cover pressure.
 
         A required thickness is evaluated to resist hoop stress,
@@ -237,9 +240,9 @@ class Cover(Component):
         t_min = min(t_1, t_2, t_3, t_4)
 
         if self.milled:
-            return (t_3, t_min)
+            return (float(t_3), float(t_min))
         else:
-            return (t_min, t_min)
+            return (float(t_min), float(t_min))
 
     def panel_flutter(self, mach: float, altitude: float) -> float:
         """Evaluate baseline thickness to avoid local panel flutter.
@@ -295,7 +298,7 @@ class Cover(Component):
 
         t_b = (phi_b * self.L) / (FM * self.material.E / q) ** (1 / 3)
 
-        return t_b
+        return float(t_b)
 
     def acoustic_fatigue(self) -> Tuple[float, float]:
         """Thickness requirements based on acoustic fatigue.
@@ -339,4 +342,4 @@ class Cover(Component):
         f_l = 1.0794 + 0.000143 * x_l - 0.076475 * (1 / x_l) - 0.29969 * np.log(x_l)
         f_c = 1.0794 + 0.000143 * x_c - 0.076475 * (1 / x_c) - 0.29969 * np.log(x_c)
 
-        return (f_l * t_l, f_c * t_c)
+        return (float(f_l * t_l), float(f_c * t_c))
