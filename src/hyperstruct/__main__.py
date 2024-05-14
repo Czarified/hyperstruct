@@ -1,6 +1,11 @@
 """Command-line interface."""
 
+from importlib.metadata import version
+
 import click
+
+
+__version__ = version("hyperstruct")
 
 
 @click.command()

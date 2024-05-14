@@ -121,7 +121,7 @@ class Cover(Component):
         else:
             t_c = self.q / (self.c_r * self.material.F_su)
 
-        return t_c
+        return float(t_c)
 
     def field_thickness_postbuckled(self, alpha: float = 45) -> float:
         """Field thickness based on critical shear flow.
@@ -177,9 +177,9 @@ class Cover(Component):
         On unmilled panels, the land thickness is simply equivalent to the field thickness.
         """
         if not self.milled:
-            return self.t_c
+            return float(self.t_c)
         else:
-            return self.q / (self.c_r * self.material.F_su)
+            return float(self.q / (self.c_r * self.material.F_su))
 
     def thickness_pressure(self, F_allow: Any = None) -> Tuple[float, float]:
         """Thicknesses based on cover pressure.
