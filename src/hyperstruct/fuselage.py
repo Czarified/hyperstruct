@@ -255,21 +255,27 @@ class Cover(Component):
         To find the final required thickness, this method must be looped
         over for all Mach and altitudes corresponding to the flight
         envelope conditions of the aircraft.
+
+        Inputs: Mach Number, and Altitude (in thousands of feet)
+        Returns: Field Thickness
         """
         # Dynamic pressures based on standard day atmosphere.
         # Dynamic Pressure, q, in [psf]
         # Altitudes must be measured in [ft]
-        if altitude <= 20000:
+        if altitude <= 20:
             q = mach**2 * (1479.757 - 52.187 * altitude + 0.619868 * altitude**2)
-        elif 20000 < altitude <= 70000:
+        elif 20 < altitude <= 70:
             q = mach**2 * (
                 1465.175
                 - 50.76695 * altitude
                 + 0.6434412 * altitude**2
                 - 0.002907194 * altitude**3
             )
-        elif altitude > 70000:
+        elif altitude > 70:
             q = mach**2 * (199.659 / altitude) ** 4
+
+        # Dynamic pressure is in [psf] convert to [psi]
+        q = q / 144
 
         # Calculate the Mach Number Effect
         # The Mach Number Effect, FM, is a 3 piece function from SWEEP.
