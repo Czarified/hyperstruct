@@ -349,3 +349,37 @@ class Cover(Component):
         f_c = 1.0794 + 0.000143 * x_c - 0.076475 * (1 / x_c) - 0.29969 * np.log(x_c)
 
         return (float(f_l * t_l), float(f_c * t_c))
+
+
+@dataclass
+class MinorFrame(Component):
+    """Fuselage Minor Frame Component.
+
+    Minor Frames form part of the basic structural grid work that resists
+    vehicle shear and bending loads. As opposed to Major Frames, Minor
+    Frames do not redistribute concentrated loads. Minor Frames are sized
+    for general shell stability, acoustic fatigue, and forced crippling
+    due to postbuckled cover (skin) design.
+
+    Minor Frames have an assumed construction, shown here? The geometry
+    variables, frame depth (c), and cap flange width (b), are user input
+    parameters. Thickness is the only parameter determined by sizing.
+
+    For simplicity, the flanges are assumed to have a thickness twice
+    that of the web.
+    """
+
+    c: float
+    b: float
+
+    def general_stability(self) -> float:
+        """Thickness to avoid general instability."""
+        return 0.0
+
+    def acoustic_fatigue(self) -> float:
+        """Thickness from acoustic fatigue."""
+        return 0.0
+
+    def forced_crippling(self) -> float:
+        """Thickness from force crippling."""
+        return 0.0
