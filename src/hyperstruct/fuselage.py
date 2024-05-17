@@ -127,11 +127,11 @@ class Cover(Component):
         diagonal tension angle is unknown because intermediate frame and
         stringer sizing is not known. An initial estimate of 45 degrees is used.
 
-        Arguments:
-            alpha = Diagonal tension angle (assumed 45 degrees)
+        Args:
+            alpha: Diagonal tension angle (assumed 45 degrees)
 
         Returns:
-            t_c = field thickness
+            A float of field thickness.
         """
         F_scr = (
             self.k_s
@@ -197,11 +197,11 @@ class Cover(Component):
         from zero to peak pressure 20,000 times during the vehicle's useful
         life, with a stress concentration factor of 4.0.
 
-        Arguments:
-            F_allow = Allowable stress (25% yield, if not provided)
+        Args:
+            F_allow: Allowable stress (25% yield, if not provided)
 
         Returns:
-            (t_l, t_c) = Land thickness, Field thickness
+            A tuple of (Land thickness, Field thickness).
         """
         b = min(self.D, self.L)
         if not F_allow:
@@ -262,12 +262,12 @@ class Cover(Component):
         over for all Mach and altitudes corresponding to the flight
         envelope conditions of the aircraft.
 
-        Arguments:
-            mach = Mach Number
-            altitude = Altitude (in thousands of feet)
+        Args:
+            mach: Mach Number
+            altitude: Altitude (in thousands of feet)
 
         Returns:
-            Field Thickness
+            A float of Field Thickness.
         """
         # Dynamic pressures based on standard day atmosphere.
         # Dynamic Pressure, q, in [psf]
@@ -336,7 +336,8 @@ class Cover(Component):
         decibel level is then increased by 30, which represents jet noise instead
         of a purely random spectrum.
 
-        Returns: (t_l, t_c)
+        Returns:
+            A tuple of Land thickness, Field thickness (t_l, t_c).
         """
         # Random distribution acoustic level, that provides a material fatigue
         # life of 10^9 cycles.
@@ -430,13 +431,13 @@ class MinorFrame(Component):
         The thickness that provides frame stiffness sufficient to prevent
         general instability failure is solved via the Shanley equation.
 
-        Arguments:
-            L = Frame Spacing
-            D = Fuselage Diameter
-            M = Bending moment at the cut
+        Args:
+            L: Frame Spacing
+            D: Fuselage Diameter
+            M: Bending moment at the cut
 
         Returns:
-            t_r = Flange thickness
+            A float of Flange thickness.
         """
         c_f = 1 / 16000
         numerator = c_f * M * D**2
@@ -468,11 +469,11 @@ class MinorFrame(Component):
         decibel level is then increased by 30, which represents jet noise instead
         of a purely random spectrum.
 
-        Arguments:
-            b = Support spacing (frame spacing)
+        Args:
+            b: Support spacing (frame spacing)
 
         Returns:
-            t_r = Flange thickness
+            A float of Flange thickness.
         """
         # Random distribution acoustic level, that provides a material fatigue
         # life of 10^9 cycles.
