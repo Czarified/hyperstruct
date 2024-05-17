@@ -12,7 +12,6 @@ from typing import Tuple
 import numpy as np
 
 from hyperstruct import Component
-from hyperstruct import Material
 
 
 @dataclass
@@ -26,9 +25,6 @@ class Cover(Component):
     The cover sizing procedure starts at minimum thicknesses and proceeds
     through a systematic check for the different criteria.
     """
-
-    material: Material
-    """material the cover is made of."""
 
     milled: bool
     """if panel is to be milled for different field vs land thicknesses."""
@@ -130,6 +126,12 @@ class Cover(Component):
         Postbuckled strength assumes sizing covers with diagonal tension. The
         diagonal tension angle is unknown because intermediate frame and
         stringer sizing is not known. An initial estimate of 45 degrees is used.
+
+        Arguments:
+            alpha = Diagonal tension angle (assumed 45 degrees)
+
+        Returns:
+            t_c = field thickness
         """
         F_scr = (
             self.k_s
@@ -195,7 +197,11 @@ class Cover(Component):
         from zero to peak pressure 20,000 times during the vehicle's useful
         life, with a stress concentration factor of 4.0.
 
-        Returns: (t_l, t_c)
+        Arguments:
+            F_allow = Allowable stress (25% yield, if not provided)
+
+        Returns:
+            (t_l, t_c) = Land thickness, Field thickness
         """
         b = min(self.D, self.L)
         if not F_allow:
@@ -256,8 +262,12 @@ class Cover(Component):
         over for all Mach and altitudes corresponding to the flight
         envelope conditions of the aircraft.
 
-        Inputs: Mach Number, and Altitude (in thousands of feet)
-        Returns: Field Thickness
+        Arguments:
+            mach = Mach Number
+            altitude = Altitude (in thousands of feet)
+
+        Returns:
+            Field Thickness
         """
         # Dynamic pressures based on standard day atmosphere.
         # Dynamic Pressure, q, in [psf]
@@ -370,15 +380,106 @@ class MinorFrame(Component):
     """
 
     c: float
+    """frame depth."""
+
     b: float
+    """cap flange width."""
 
-    def general_stability(self) -> float:
-        """Thickness to avoid general instability."""
-        return 0.0
+    t_r: float = 0.0
+    """cap flange thickness."""
 
-    def acoustic_fatigue(self) -> float:
-        """Thickness from acoustic fatigue."""
-        return 0.0
+    @property
+    def t_w(self) -> float:
+        """Web thickness."""
+        return self.t_r / 2
+
+    @property
+    def area(self) -> float:
+        """Cross-sectional area."""
+        return 4 * self.b * self.t_r + self.c * self.t_w
+
+    @property
+    def i_xx(self) -> float:
+        """Second moment of area (bending moment of inertia).
+
+        Assumes the simplified case that t_r = 2*t_w.
+        """
+        return self.t_r * (
+            self.b * self.c**2 + 2 * self.b**3 / 3 - self.b**2 * self.c + self.c**3 / 24
+        )
+
+    @property
+    def rho(self) -> float:
+        """Radius of gyration."""
+        return (
+            (
+                self.b * self.c**2
+                + 2 * self.b**3 / 3
+                - self.b**2 * self.c
+                + self.c**3 / 24
+            )
+            / (4 * self.b + self.c / 2)
+        ) ** 0.5
+
+    def general_stability(self, L: float, D: float, M: float) -> float:
+        """Thickness to avoid general instability.
+
+        The thickness that provides frame stiffness sufficient to prevent
+        general instability failure is solved via the Shanley equation.
+
+        Arguments:
+            L = Frame Spacing
+            D = Fuselage Diameter
+            M = Bending moment at the cut
+
+        Returns:
+            t_r = Flange thickness
+        """
+        c_f = 1 / 16000
+        numerator = c_f * M * D**2
+        denominator = (
+            self.material.E_c
+            * L
+            * (self.b * self.c**2 + 2 * self.b**3 * self.c / 3 + self.c**3 / 24)
+        )
+
+        return float(numerator / denominator)
+
+    def acoustic_fatigue(self, b: float) -> float:
+        """Thickness requirements based on acoustic fatigue.
+
+        Assumptions are:
+            1.) The overall pressure level from jet engine noise is approximately
+                30db higher than the random spectrum pressure level.
+            2.) The accuracy of noise intensity prediction is on the order of +/-3db.
+            3.) Beam theory is sufficient for modelign the shell elements.
+            4.) The design to repetitive pressure intensity from jet engine noise
+                can be correlated tot he material endurance limit. Polished specimen
+                s-n data, K_t=1, is a sufficiently representative strength index.
+            5.) The method is based on a limited amount of testing.
+            6.) The method does not consider panel aspect ratio, and is, therefore,
+                conservative when aspect ratios approach 1.
+
+        The sound pressure level used is based on a material property. This value
+        provides the fatigue life of 10^9 cycles for the material. The overall
+        decibel level is then increased by 30, which represents jet noise instead
+        of a purely random spectrum.
+
+        Arguments:
+            b = Support spacing (frame spacing)
+
+        Returns:
+            t_r = Flange thickness
+        """
+        # Random distribution acoustic level, that provides a material fatigue
+        # life of 10^9 cycles.
+        db_r = self.material.db_r
+        db_oa = db_r + 30
+        P = 2.9e-9 * 10 ** (db_oa / 20)
+        # Note: K_c is directly hardcoded to 7.025, per Fig. 20 of ADA002867
+        t_r = 7.025 * b**0.5 * P**2 / self.material.F_en
+
+        return t_r
 
     def forced_crippling(self) -> float:
         """Thickness from force crippling."""

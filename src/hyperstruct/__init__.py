@@ -58,6 +58,9 @@ class Component:
     weights estimation.
     """
 
+    material: Material
+    """material the cover is made of."""
+
     def synthesis(self) -> None:
         """The sizing method.
 
