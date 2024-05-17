@@ -1,6 +1,10 @@
 """Hyperstruct."""
 
 from dataclasses import dataclass
+from importlib.metadata import version
+
+
+__version__ = version("hyperstruct")
 
 
 @dataclass
@@ -53,6 +57,9 @@ class Component:
     Components have several base methods and attributes that enable sizing and
     weights estimation.
     """
+
+    material: Material
+    """material the cover is made of."""
 
     def synthesis(self) -> None:
         """The sizing method.
