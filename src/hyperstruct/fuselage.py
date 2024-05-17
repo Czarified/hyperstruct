@@ -411,15 +411,18 @@ class MinorFrame(Component):
     @property
     def rho(self) -> float:
         """Radius of gyration."""
-        return (
+        return float(
             (
-                self.b * self.c**2
-                + 2 * self.b**3 / 3
-                - self.b**2 * self.c
-                + self.c**3 / 24
+                (
+                    self.b * self.c**2
+                    + 2 * self.b**3 / 3
+                    - self.b**2 * self.c
+                    + self.c**3 / 24
+                )
+                / (4 * self.b + self.c / 2)
             )
-            / (4 * self.b + self.c / 2)
-        ) ** 0.5
+            ** 0.5
+        )
 
     def general_stability(self, L: float, D: float, M: float) -> float:
         """Thickness to avoid general instability.
@@ -479,7 +482,7 @@ class MinorFrame(Component):
         # Note: K_c is directly hardcoded to 7.025, per Fig. 20 of ADA002867
         t_r = 7.025 * b**0.5 * P**2 / self.material.F_en
 
-        return t_r
+        return float(t_r)
 
     def forced_crippling(self) -> float:
         """Thickness from force crippling."""
