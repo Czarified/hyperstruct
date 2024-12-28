@@ -386,6 +386,9 @@ class MinorFrame(Component):
     b: float
     """cap flange width."""
 
+    construction: str
+    """Construction method. ('stringer' or 'longeron')"""
+
     t_r: float = 0.0
     """cap flange thickness."""
 
@@ -485,7 +488,18 @@ class MinorFrame(Component):
 
         return float(t_r)
 
-    def forced_crippling(self) -> float:
+    def forced_crippling(
+        self,
+        L: float,
+        D: float,
+        M: float,
+        Z: float,
+        sum_z_sq: float,
+        t_c: float,
+        RC: float,
+        f_s: float,
+        f_scr: float,
+    ) -> float:
         """Thickness from forced crippling.
 
         If the covers on the fuselage structure are allowed to buckle under shear loads,
@@ -506,5 +520,83 @@ class MinorFrame(Component):
         in the sizing process, longeron (stringer) area has not been established. The
         longitudinal member area is required to define panel boundary support constraints.
         A first approximation is made for longeron area base on vehicle bending loads.
+
+        Args:
+            L: Frame Spacing
+            D: Fuselage Diameter
+            M: Bending moment at the cut
+            Z: coordinate of the extreme fiber (fuselage half-depth at cut)
+            sum_z_sq: sum of longeron coordinates squared
+            t_c: Cover thickness
+            RC: Side panel radius of curvature
+            f_s: Shear stress in Cover at cut
+            f_scr: Critical shear buckling strength of Cover
+
+        Returns:
+            A bunch of floats?
         """
+        A_s = M * Z / (self.material.F_cy * sum_z_sq)
+        """Cover sizing is established to satisfy strength and other criteria within the Cover
+        class. Shear stress based on this thickness is compared against the critical shear stress
+        to determine whether the panel is critical for postbuckled strength. At this point
+        in the sizing process, longeron (stringer) area has not been established. The
+        longitudinal member area is required to define panel boundary support constraints.
+        A first approximation is made for longeron area base on vehicle bending loads.
+        """
+
+        # There's two rules here. The dimension ratios are capped at 2, and
+        # we need to use the larger ratio depending on the convention of construction.
+        # Typically, for Stringer systems D > L, but for Longerons L > D.
+        if D >= L:
+            if D / L > 2:
+                K = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
+            else:
+                K = np.tanh((0.5 + 300 * (t_c / RC * D / L)) * np.log10(f_s / f_scr))
+        elif L > D:
+            if L / D > 2:
+                K = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
+            else:
+                K = np.tanh((0.5 + 300 * (t_c / RC * L / D)) * np.log10(f_s / f_scr))
+        else:
+            raise ValueError(
+                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
+            )
+
+        # Angle of the folds is given an initial approximation.
+        # This is probably good enough for weights sizing, but a more exact solution involves iteration.
+        # This is the radians equivalent of 45 degrees.
+        alpha = np.pi / 4  # [rad]
+
+        # The forced crippling method is highly dependant on empirical relations.
+        # As such, the specific relations we use are dependant on the construction method.
+        # This method must be chosen from the user, but they can use it as a conceptual
+        # sizing variable permutation if they wish.
+        if self.construction == "stringer":
+            ####
+            # STRINGER CONSTRUCTION
+            ####
+
+            pass
+
+            ####
+
+        elif self.construction == "longeron":
+            ####
+            # LONGERON CONSTRUCTION
+            ####
+
+            pass
+
+            ####
+
+        else:
+            raise AttributeError(
+                "The MinorFrame attribute 'construction' is not properly defined. Acceptable options are 'stringer' or 'longeron'"
+            )
+
+        # Temporary stuff to pass pre-commit checks. Delete this.
+        _ = A_s + 1
+        _ = K + 1
+        _ = alpha + 1
+        #
         return 0.0
