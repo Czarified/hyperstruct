@@ -486,5 +486,25 @@ class MinorFrame(Component):
         return float(t_r)
 
     def forced_crippling(self) -> float:
-        """Thickness from force crippling."""
+        """Thickness from forced crippling.
+
+        If the covers on the fuselage structure are allowed to buckle under shear loads,
+        in the buckled state these loads are supported by diagonal tension stresses.
+        Axial loads produced by cover tension field are reacted by stiffening elements
+        (minor frames, stringers) that bound the panel. Since shear loads are maximum at
+        the midpoint of the side panel, this condition is evaluated for elements on the
+        side sectors of the shell.
+
+        Basic formulations for the prevention of forced crippling failure due to the
+        postbuckled design are taken directly from Kuhn[4] and Bruhn [1]. These methods
+        have been modified to account for the condition where different materials are
+        selected for cover, longeron, and minor frame design.
+
+        Cover sizing is established to satisfy strength and other criteria within the Cover
+        class. Shear stress based on this thickness is compared against the critical shear stress
+        to determine whether the panel is critical for postbuckled strength. At this point
+        in the sizing process, longeron (stringer) area has not been established. The
+        longitudinal member area is required to define panel boundary support constraints.
+        A first approximation is made for longeron area base on vehicle bending loads.
+        """
         return 0.0
