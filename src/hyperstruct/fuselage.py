@@ -499,6 +499,9 @@ class MinorFrame(Component):
         RC: float,
         f_s: float,
         f_scr: float,
+        cover_e: float = None,
+        long_e: float = None,
+        frame_e: float = None,
     ) -> float:
         """Thickness from forced crippling.
 
@@ -521,6 +524,13 @@ class MinorFrame(Component):
         longitudinal member area is required to define panel boundary support constraints.
         A first approximation is made for longeron area base on vehicle bending loads.
 
+        Cover sizing is established to satisfy strength and other criteria within the Cover
+        class. Shear stress based on this thickness is compared against the critical shear stress
+        to determine whether the panel is critical for postbuckled strength. At this point
+        in the sizing process, longeron (stringer) area has not been established. The
+        longitudinal member area is required to define panel boundary support constraints.
+        A first approximation is made for longeron area base on vehicle bending loads.
+
         Args:
             L: Frame Spacing
             D: Fuselage Diameter
@@ -535,14 +545,8 @@ class MinorFrame(Component):
         Returns:
             A bunch of floats?
         """
+        # Longeron/Stringer area
         A_s = M * Z / (self.material.F_cy * sum_z_sq)
-        """Cover sizing is established to satisfy strength and other criteria within the Cover
-        class. Shear stress based on this thickness is compared against the critical shear stress
-        to determine whether the panel is critical for postbuckled strength. At this point
-        in the sizing process, longeron (stringer) area has not been established. The
-        longitudinal member area is required to define panel boundary support constraints.
-        A first approximation is made for longeron area base on vehicle bending loads.
-        """
 
         # There's two rules here. The dimension ratios are capped at 2, and
         # we need to use the larger ratio depending on the convention of construction.
@@ -576,7 +580,30 @@ class MinorFrame(Component):
             # STRINGER CONSTRUCTION
             ####
 
-            pass
+            if not cover_e:
+                cover_e = self.material.E_c
+
+            if not long_e:
+                long_e = self.material.E_c
+
+            if not frame_e:
+                frame_e = self.material.E_c
+
+            # Use the same K value as before.
+            alpha_ratio = K**0.25
+
+            # A is the curve fit ordinate, Fig. 24 of ADA002867
+            A = (D / RC * np.sqrt(cover_e / f_s)) / np.sqrt(
+                1
+                + 0.5
+                * (
+                    D * t_c * cover_e / (A_s * long_e)
+                    + L * cover_e / (self.area * frame_e)
+                )
+            )
+
+            alpha_pdt = (np.pi / 4 + 0.1443 * A) / (1 + 0.175622 * A + 0.013411 * A**2)
+            alpha = alpha_pdt * alpha_ratio
 
             ####
 
@@ -595,8 +622,6 @@ class MinorFrame(Component):
             )
 
         # Temporary stuff to pass pre-commit checks. Delete this.
-        _ = A_s + 1
-        _ = K + 1
         _ = alpha + 1
         #
         return 0.0
