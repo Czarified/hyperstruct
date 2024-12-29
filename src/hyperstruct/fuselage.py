@@ -501,7 +501,6 @@ class MinorFrame(Component):
         f_scr: float,
         cover_e: float = None,
         long_e: float = None,
-        frame_e: float = None,
     ) -> float:
         """Thickness from forced crippling.
 
@@ -575,53 +574,105 @@ class MinorFrame(Component):
         # As such, the specific relations we use are dependant on the construction method.
         # This method must be chosen from the user, but they can use it as a conceptual
         # sizing variable permutation if they wish.
+        if not cover_e:
+            cover_e = self.material.E_c
+
+        if not long_e:
+            long_e = self.material.E_c
+
+        frame_e = self.material.E_c
+
+        # Use the same K value as before.
+        alpha_ratio = K**0.25
+
+        # A is the curve fit ordinate, Fig. 24 of ADA002867
+        A = (D / RC * np.sqrt(cover_e / f_s)) / np.sqrt(
+            1
+            + 0.5
+            * (D * t_c * cover_e / (A_s * long_e) + L * cover_e / (self.area * frame_e))
+        )
+
+        alpha_pdt = (np.pi / 4 + 0.1443 * A) / (1 + 0.175622 * A + 0.013411 * A**2)
+        alpha = alpha_pdt * alpha_ratio
+
+        # Secondary ring load: axial load in ring due to shear stress
+        P_rg = f_s * K * t_c * L * np.tan(alpha)
+
+        # Effective ring area
+        A_erg = self.area / (1 + (self.c / (2 * self.rho)) ** 2)
+
         if self.construction == "stringer":
             ####
             # STRINGER CONSTRUCTION
             ####
 
-            if not cover_e:
-                cover_e = self.material.E_c
+            # Secondary stringer load: axial load in stringer due to shear stress
+            P_st = f_s * K * np.tan(alpha) ** (-1)
 
-            if not long_e:
-                long_e = self.material.E_c
+            # Effecting ring and cover area
+            A_edt = A_erg + 0.5 * L * t_c * (1 - K) * (cover_e / frame_e)
 
-            if not frame_e:
-                frame_e = self.material.E_c
-
-            # Use the same K value as before.
-            alpha_ratio = K**0.25
-
-            # A is the curve fit ordinate, Fig. 24 of ADA002867
-            A = (D / RC * np.sqrt(cover_e / f_s)) / np.sqrt(
-                1
-                + 0.5
-                * (
-                    D * t_c * cover_e / (A_s * long_e)
-                    + L * cover_e / (self.area * frame_e)
-                )
-            )
-
-            alpha_pdt = (np.pi / 4 + 0.1443 * A) / (1 + 0.175622 * A + 0.013411 * A**2)
-            alpha = alpha_pdt * alpha_ratio
-
-            ####
+            # Stress in the ring frame
+            f_rg = P_rg / A_edt
+            # Secondary stringer stress: axial load due to shear stress
+            f_st = P_st / A_edt
 
         elif self.construction == "longeron":
             ####
             # LONGERON CONSTRUCTION
             ####
 
-            pass
+            # Secondary stringer load: axial load in stringer due to shear stress
+            P_st = f_s * K * t_c * D / 2 * np.tan(alpha) ** (-1)
 
-            ####
+            A_est = A_s / (1 + (self.c / (2 * self.rho)) ** 2)
+
+            # Effecting ring and cover area
+            A_edt = A_est + 0.5 * D * t_c * (1 - K) * (cover_e / frame_e)
+
+            # Stress in the ring frame
+            f_rg = P_rg / A_edt
+            # Secondary longeron stress: axial load in longeron due to shear stress
+            f_st = P_st / A_edt
 
         else:
             raise AttributeError(
                 "The MinorFrame attribute 'construction' is not properly defined. Acceptable options are 'stringer' or 'longeron'"
             )
 
-        # Temporary stuff to pass pre-commit checks. Delete this.
-        _ = alpha + 1
-        #
+        # Max stress in the frame is based on an empirical relation from Bruhn.
+        # This is dependent on the ratio of frame/longeron spacing.
+        if L / D <= 1.2:
+            frgmax_frg = 1 + 0.78 * (1 - K) - 0.65 * L / D * (1 - K)
+        elif L / D > 1.2:
+            frgmax_frg = 1.0
+        else:
+            raise ValueError(
+                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
+            )
+
+        frgmax = frgmax_frg * f_rg
+
+        # Allowable ring frame stress
+        if RC <= 151.586:
+            N = (
+                (18695 + 75.238 * RC)
+                * K ** (2 / 3)
+                * (self.t_r / t_c) ** (1 / 3)
+                * (frame_e / cover_e) ** (1 / 9)
+            )
+        elif RC > 151.586:
+            N = (
+                30100
+                * K ** (2 / 3)
+                * (self.t_r / t_c) ** (1 / 3)
+                * (frame_e / cover_e) ** (1 / 9)
+            )
+
+        G = self.material.F_cy * 1088 - 5 / (
+            5.88 * (self.material.F_cy / frame_e + 0.002) ** 0.5
+        )
+
+        F_RG = N * G
+
         return 0.0
