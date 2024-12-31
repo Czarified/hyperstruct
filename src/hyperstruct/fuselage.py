@@ -699,3 +699,61 @@ class MinorFrame(Component):
             self.t_r = t_r2
 
         return t_r2
+
+
+@dataclass
+class Longeron(Component):
+    """Fuselage longitudinal member component.
+
+    Longitudinal Members include both Stringers and Longerons. The Longitudinal Member
+    sizing is determined to satisfy minimum area, forced crippling, bending strength,
+    and stiffness requirements. The methods account for differences in Cover, Longeron,
+    and MinorFrame materials, and the effects of cutouts.
+
+    The flange width is set up to equal the web height, and the thickness is assumed
+    to be constant across the section. This primarily simplifies
+    some of the calculations, and should be sufficient for weight estimates.
+    """
+
+    b: float
+    """Web Height, and Flange Width."""
+
+    t_s: float
+    """Longeron thickness."""
+
+    k: float
+    """Inner flange proportion of web height."""
+
+    @property
+    def area(self) -> float:
+        """Cross-sectional area."""
+        return self.t_s * self.b * (3 + self.k)
+
+    @property
+    def e(self) -> float:
+        """Eccentricity."""
+        return self.b * (0.5 + self.k / (3 + self.k))
+
+    @property
+    def i_xx(self) -> float:
+        """Second moment of area (moment of inertia), strong-axis."""
+        return (
+            self.t_s
+            * self.b
+            * (
+                2 * self.e**2
+                + self.b**2 / 12
+                + (0.5 * self.b - self.e) ** 2
+                + self.k * (self.b - self.e) ** 2
+            )
+        )
+
+    @property
+    def rho(self) -> float:
+        """Radius of gyration."""
+        return np.sqrt(self.i_xx / self.area)
+
+    @property
+    def area_effective(self) -> float:
+        """Effective area."""
+        return self.area / (1 + (self.e / self.rho) ** 2)
