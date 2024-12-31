@@ -839,3 +839,103 @@ class Longeron(Component):
         #
 
         return A_l
+
+
+@dataclass
+class Bulkhead(Component):
+    """Fuselage pressure bulkhead component.
+
+    Pressure bulkhead are located at structural synthesis cuts by the user-
+    determined input. Assumptions used in this approach are:
+        1.  Construction is stiffened sheet design simply supported around
+            the periphery.
+        2.  Strip theory provides an adequate definition of maximum bending
+            moment.
+        3.  Stiffeners are of constant cross section basedon the maxium bending
+            moment, at equal spacings, and oriented parallel to the shortest
+            bulkhead dimension.
+        4.  Web thickness base don maximum pressure is constant throughout the
+            bulkhead surface.
+        5.  Minor frame material is used for bulkhead construction.
+
+    There are 3 assumed pressure loading types: Uniform, Triangular, and
+    Trapezoidal. Uniform loading occurs from cabin or equipment compartment
+    pressurization. Triangular occurs from fuel head. Trapezoidal loadings
+    result from the combinations of fuel head and vent pressure. Fuel pressure
+    results from the vehicle maneuver such that both positive and negative
+    maneuvers are examined.
+    """
+
+    duf: float
+    """Design Ultimate Factor.
+
+    (2.0 for personnel environment, 1.5 for equipment)
+    """
+
+    p_1: float
+    """Triangular pressure."""
+
+    p_2: float
+    """Uniform pressure."""
+
+    L: float
+    """Height of pressurized surface."""
+
+    t_w: float
+    """Web field thickness.
+
+    (Webs are assumed to be milled.)
+    """
+
+    t_l: float
+    """Web land thickness.
+
+    (Webs are assumed to be milled.)
+    """
+
+    d: float
+    """Stiffener spacing."""
+
+    t_s: float
+    """Stiffener web thickness."""
+
+    H: float
+    """Stiffener cap width.
+
+    (An I-beam cap geometry.)
+    """
+
+    def allowable_tensile_stress(self, K_r: float) -> float:
+        """The design allowable tensile stress.
+
+        Args:
+            K_r: Fatigue reduction factor (percent of Ftu)
+
+        Returns:
+            f_t: design allowable tensile stress
+        """
+        return min(self.material.F_tu / self.duf, K_r * self.material.F_tu)
+
+    def max_bending_moment(self) -> float:
+        """Bending moment per unit width for the pressure loading."""
+        x = -self.L * self.p_2 + self.L * np.sqrt(
+            self.p_2**2 + self.p_2 * self.p_1 + (self.p_1**2) / 3
+        ) * self.p_1 ** (-1)
+        k = x / self.L
+        M_max = (
+            self.p_2 * self.L**2 * 0.5 * (k - k**2)
+            + self.p_1 * self.L**2 * (k - k**3) / 6
+        )
+
+        return M_max
+
+    def stiffener_area(self) -> float:
+        """Area of stiffener, including effective web."""
+        return 6 * self.t_s * self.H
+
+    def stiffener_inertia(self) -> float:
+        """Second moment of area of stiffener, including effective web.
+
+        Second order therms of thickness are assumed to be negligible.
+        """
+        return 14 / 3 * self.t_s * self.H**3
