@@ -872,6 +872,9 @@ class Bulkhead(Component):
     (2.0 for personnel environment, 1.5 for equipment)
     """
 
+    K_r: float
+    """Fatigue reduction factor (percent of Ftu)"""
+
     p_1: float
     """Triangular pressure."""
 
@@ -905,16 +908,13 @@ class Bulkhead(Component):
     (An I-beam cap geometry.)
     """
 
-    def allowable_tensile_stress(self, K_r: float) -> float:
+    def allowable_tensile_stress(self) -> float:
         """The design allowable tensile stress.
-
-        Args:
-            K_r: Fatigue reduction factor (percent of Ftu)
 
         Returns:
             f_t: design allowable tensile stress
         """
-        return min(self.material.F_tu / self.duf, K_r * self.material.F_tu)
+        return min(self.material.F_tu / self.duf, self.K_r * self.material.F_tu)
 
     def max_bending_moment(self) -> float:
         """Bending moment per unit width for the pressure loading."""
@@ -939,3 +939,59 @@ class Bulkhead(Component):
         Second order therms of thickness are assumed to be negligible.
         """
         return 14 / 3 * self.t_s * self.H**3
+
+    def web_thickness(self) -> tuple:
+        """Evaluate web thickness.
+
+        Web sizing based on combined bending and diaphragm action between
+        stiffeners. Webs are assumed to be milled between supports. Thicknesses
+        are derived by curve-fit approximation of theoretical plots (same
+        analytical method as Cover diaphragm sizing).
+
+        Returns:
+            (t_w, t_l): Web field thickness, Web land thickness
+        """
+        t_w = (
+            1.3769
+            * self.d
+            * (self.p_1 + self.p_2) ** 2.484
+            * self.material.E**0.394
+            / self.allowable_tensile_stress(self.K_r) ** 4.467
+        )
+
+        t_l = (
+            1.646
+            * self.d
+            * (self.p_1 + self.p_2) ** 0.894
+            * self.material.E**1.984
+            / self.allowable_tensile_stress(self.K_r) ** 1.288
+        )
+
+        return (t_w, t_l)
+
+    def stiffener_spacing(
+        self,
+        d_1: float = 2.0,
+        d_2: float = 12.0,
+        H_1: float = 1.0,
+        H_2: float = 5.0,
+        t_s1: float = 0.025,
+    ) -> float:
+        """Stiffener spacing optimization routine.
+
+        Stiffener spacing search is initiated at minimum spacing and
+        continued at fixed increments where three values of effective thickness
+        are obtained. A three-point curve fit solution is used to determine
+        the optimum spacing.
+
+        Args:
+            d_1: spacing lower bound
+            d_2: spacing upper bound
+            H_1: width lower bound
+            H_2: width upper bound
+            t_s1: min gauge thickness
+
+        Returns:
+            d: stiffener spacing
+        """
+        self.t_w, self.t_l = self.web_thickness()
