@@ -757,3 +757,85 @@ class Longeron(Component):
     def area_effective(self) -> float:
         """Effective area."""
         return self.area / (1 + (self.e / self.rho) ** 2)
+
+    def bending_strength(
+        self,
+        M_ext: float,
+        t: float,
+        d: float,
+        I_t: float,
+        l_p: float,
+        rtu: float,
+        A_s: float,
+        I_a: float,
+    ) -> float:
+        """Thickness required to satisfy bending strength.
+
+        Longitudinal member sizing is dependent on the contribution of all
+        copmonents that resist bending loads. This method accounts for the difference
+        in behavior of cover elements under tension load versus the behavior in
+        compression. Cover material, should it differ from longeron material, can
+        also have different strength and elastic properties.
+
+        The assumption that plane sections remain plane simplifies the estimating
+        approach. The practice of using a Design Ultimate Factor of Safety of 1.5
+        in analysis and metal deformation characteristics results in stresses at
+        limit load occurring in the elastic range.
+
+        The stress at any point on the shell is then proportional to the extreme
+        fiber stress according to the relationship of vertical coordinate versus
+        extreme fiber coordinate.
+
+        Bending moment is assumed to be reactied by an internal coupled force system.
+        Thus, in the case of down-bending, the uper half of the shell sustains tension
+        loads, and the lower half, compression loads; half of the moment is reacted
+        in each half. Covers are totally effective in the tension sector of the
+        fuselage. Cutouts eliminate cover contributions; proximity to cutouts degrade
+        the effectiveness of the cover. The width of cutouts at other synthesis cuts
+        combined with longitudinal displacement and hsear lag slope of 2 to 1 is used
+        to determine the apparent effective width.
+
+        Args:
+            M_ext: External moment at the cut
+            t: cover thickness
+            d: fuselage depth
+            I_t: cover moment of inertia, as a function of thickness
+            l_p: cover peripheral length
+            rtu: apparent panel degradation due to cutout proximity
+            A_s: stringer/longeron area
+            I_a: side stringer moment of inertia aa a funciton of area
+
+        Returns:
+            A_l: area that satisfies the bending strength requirement
+        """
+        # Max allowable extreme fiber stresses
+        # Longeron/Stringer
+        f_max_l = 0.9 * self.material.F_cy
+        # Cover
+        f_max_c = 0.76 * self.material.F_tu
+
+        # Moment reacted by the upper cover in tension
+        M_c = t * (f_max_c / (d / 2)) * I_t * (l_p - rtu / l_p)
+
+        # Moment reacted by the upper side panel stringers
+        M_s = A_s * f_max_l * I_a / (0.5 * d)
+
+        # TODO: Secondary side stringer contribution
+        # Calculated in the same manner as primary side stringers
+        M_sl = 0.0
+
+        # Moment reacted by longerons
+        M_l = 0.5 * M_ext - M_c - M_s - M_sl
+
+        # Longeron area to resist this moment
+        A_l = M_l * 0.5 * d / (f_max_l * self.i_xx / self.area)
+
+        # Now the compression sector is evaluated
+        # Effectiveness of cover in compression is based on Peery curved panel buckling
+        # F_CCR = ( 9*(t_c/R)**(5/3) + 0.16*(t_c/L)**(1.3) + K_c*np.pi**2/(12*(1-nu_c**2)) ) * cover_e
+
+        # ... needs more code ... #
+
+        #
+
+        return A_l
