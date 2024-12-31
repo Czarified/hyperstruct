@@ -607,7 +607,7 @@ class MinorFrame(Component):
             ####
 
             # Secondary stringer load: axial load in stringer due to shear stress
-            P_st = f_s * K * np.tan(alpha) ** (-1)
+            # P_st = f_s * K * np.tan(alpha) ** (-1)
 
             # Effecting ring and cover area
             A_edt = A_erg + 0.5 * L * t_c * (1 - K) * (cover_e / frame_e)
@@ -615,7 +615,7 @@ class MinorFrame(Component):
             # Stress in the ring frame
             f_rg = P_rg / A_edt
             # Secondary stringer stress: axial load due to shear stress
-            f_st = P_st / A_edt
+            # f_st = P_st / A_edt
 
         elif self.construction == "longeron":
             ####
@@ -623,7 +623,7 @@ class MinorFrame(Component):
             ####
 
             # Secondary stringer load: axial load in stringer due to shear stress
-            P_st = f_s * K * t_c * D / 2 * np.tan(alpha) ** (-1)
+            # P_st = f_s * K * t_c * D / 2 * np.tan(alpha) ** (-1)
 
             A_est = A_s / (1 + (self.c / (2 * self.rho)) ** 2)
 
@@ -633,7 +633,7 @@ class MinorFrame(Component):
             # Stress in the ring frame
             f_rg = P_rg / A_edt
             # Secondary longeron stress: axial load in longeron due to shear stress
-            f_st = P_st / A_edt
+            # f_st = P_st / A_edt
 
         else:
             raise AttributeError(
@@ -642,6 +642,7 @@ class MinorFrame(Component):
 
         # Max stress in the frame is based on an empirical relation from Bruhn.
         # This is dependent on the ratio of frame/longeron spacing.
+        # This relation applies for both the applied stress, f, and the allowable stress, F.
         if L / D <= 1.2:
             frgmax_frg = 1 + 0.78 * (1 - K) - 0.65 * L / D * (1 - K)
         elif L / D > 1.2:
@@ -673,6 +674,28 @@ class MinorFrame(Component):
             5.88 * (self.material.F_cy / frame_e + 0.002) ** 0.5
         )
 
+        # Why do we not need the allowable stress, and only the allowable ratio...??
         F_RG = N * G
+        H = A * G
 
-        return 0.0
+        # Iterating for cap flange thickness, t_r
+        x_c = 0.5 * (1 - K) * cover_e / self.material.E_c
+        x_b = (4 * self.b + self.c / 2) / (
+            (1 + (self.c / (2 * self.rho)) ** 2) * L * t_c
+        )
+        x_a = ((f_s * np.tan(alpha) / H) * (frgmax / F_RG)) ** 3 * t_c * K
+
+        # An initialization for optimizing
+        err = 100
+        while err > 0.1:
+            t_r2 = self.t_r - (
+                (self.t_r * (self.t_r * x_b + x_c) ** 3 + x_a)
+                / (
+                    3 * x_b * self.t_r * (self.t_r * x_b + x_c) ** 2
+                    + (self.t_r * x_b + x_c) ** 3
+                )
+            )
+            err = t_r2 - self.t_r
+            self.t_r = t_r2
+
+        return t_r2
