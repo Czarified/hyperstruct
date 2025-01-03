@@ -10,6 +10,7 @@ from typing import Any
 from typing import Tuple
 
 import numpy as np
+from scipy.optimize import minimize_scalar
 
 from hyperstruct import Component
 
@@ -908,13 +909,13 @@ class Bulkhead(Component):
     (An I-beam cap geometry.)
     """
 
-    def allowable_tensile_stress(self) -> float:
+    def allowable_tensile_stress(self, K_r) -> float:
         """The design allowable tensile stress.
 
         Returns:
             f_t: design allowable tensile stress
         """
-        return min(self.material.F_tu / self.duf, self.K_r * self.material.F_tu)
+        return min(self.material.F_tu / self.duf, K_r * self.material.F_tu)
 
     def max_bending_moment(self) -> float:
         """Bending moment per unit width for the pressure loading."""
@@ -929,18 +930,27 @@ class Bulkhead(Component):
 
         return M_max
 
-    def stiffener_area(self) -> float:
-        """Area of stiffener, including effective web."""
-        return 6 * self.t_s * self.H
+    def stiffener_area(self, t_s: float, H: float) -> float:
+        """Area of stiffener, including effective web.
 
-    def stiffener_inertia(self) -> float:
+        Args:
+            t_s: stiffener thickness
+            H: stiffener cap width
+        """
+        return 6 * t_s * H
+
+    def stiffener_inertia(self, t_s: float, H: float) -> float:
         """Second moment of area of stiffener, including effective web.
 
         Second order therms of thickness are assumed to be negligible.
-        """
-        return 14 / 3 * self.t_s * self.H**3
 
-    def web_thickness(self) -> tuple:
+        Args:
+            t_s: stiffener thickness
+            H: stiffener cap width
+        """
+        return 14 / 3 * t_s * H**3
+
+    def web_thickness(self, d: float) -> tuple:
         """Evaluate web thickness.
 
         Web sizing based on combined bending and diaphragm action between
@@ -948,22 +958,25 @@ class Bulkhead(Component):
         are derived by curve-fit approximation of theoretical plots (same
         analytical method as Cover diaphragm sizing).
 
+        Args:
+            d: stiffener spacing
+
         Returns:
             (t_w, t_l): Web field thickness, Web land thickness
         """
         t_w = (
             1.3769
-            * self.d
+            * d
             * (self.p_1 + self.p_2) ** 2.484
-            * self.material.E**0.394
+            * self.material.E**1.984
             / self.allowable_tensile_stress(self.K_r) ** 4.467
         )
 
         t_l = (
             1.646
-            * self.d
+            * d
             * (self.p_1 + self.p_2) ** 0.894
-            * self.material.E**1.984
+            * self.material.E**0.394
             / self.allowable_tensile_stress(self.K_r) ** 1.288
         )
 
@@ -976,7 +989,7 @@ class Bulkhead(Component):
         H_1: float = 1.0,
         H_2: float = 5.0,
         t_s1: float = 0.025,
-    ) -> float:
+    ) -> tuple:
         """Stiffener spacing optimization routine.
 
         Stiffener spacing search is initiated at minimum spacing and
@@ -992,6 +1005,56 @@ class Bulkhead(Component):
             t_s1: min gauge thickness
 
         Returns:
-            d: stiffener spacing
+            t_s: minimum stiffener thickness
+            d: stiffener spacing for minimum thickness
+            H: stiffener width for minimum thickness
         """
-        self.t_w, self.t_l = self.web_thickness()
+        x = np.linspace(d_1, d_2, num=5)
+        y = []
+
+        # Flange crippling set to compressive yield stress
+        # fcc = 0.312*np.sqrt(self.material.F_cy*self.material.E_c)*(4*self.t_s/H_i)**(3/4)
+        B = self.material.F_cy / (
+            0.312 * np.sqrt(self.material.F_cy * self.material.E_c)
+        )
+
+        for d_i in x:
+            t_w, t_l = self.web_thickness(d_i)
+
+            t_s = (
+                3
+                * self.max_bending_moment()
+                * B ** (8 / 3)
+                / (224 * self.material.F_cy)
+            ) ** (1 / 3)
+            H = 4 * t_s / B ** (4 / 3)
+            t_bar = (
+                t_w
+                + (1.1 * H * (t_l - t_w) / d_i)
+                + ((4 * H * t_s + H * (2 * t_s - t_l)) / d_i)
+            )
+            y.append(t_bar)
+            print(f"{d_i:>4.1f}, {t_s:.4f}, {t_w:.4f}, {t_bar:.3f}")
+
+        # calculate polynomial
+        z = np.polyfit(x, y, 3)
+        f = np.poly1d(z)
+
+        # minimum equivalent thickness
+        res = minimize_scalar(f, bounds=(d_1, d_2), method="bounded")
+        # The minimum t_bar
+        t_bar = res.fun
+        d = res.x
+        t_s = t_s1 if t_s <= t_s1 else t_s
+        H = 4 * t_s / B ** (4 / 3)
+
+        if H < H_1:
+            raise ValueError(
+                f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
+            )
+        elif H > H_2:
+            raise ValueError(
+                f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
+            )
+
+        return (t_s, d, H)
