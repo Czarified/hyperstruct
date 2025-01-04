@@ -489,6 +489,45 @@ class MinorFrame(Component):
 
         return float(t_r)
 
+    def ring_allowable_stress(
+        self, RC: float, K: float, t_c: float, frame_e: float, cover_e: float
+    ) -> Tuple[float, float]:
+        """Allowable ring stress for the Forced Crippling method.
+
+        Args:
+            RC: radius of curvature
+            K: diagonal tension factor
+            t_c: cover thickness
+            frame_e: frame Young's Modulus
+            cover_e: cover Young's Modulus
+
+        Returns:
+            (F_RG, G): Frame allowable stress, emiprical factor from Bruhn
+        """
+        # Allowable ring frame stress
+        if RC <= 151.586:
+            N = (
+                (18695 + 75.238 * RC)
+                * K ** (2 / 3)
+                * (self.t_r / t_c) ** (1 / 3)
+                * (frame_e / cover_e) ** (1 / 9)
+            )
+        elif RC > 151.586:
+            N = (
+                30100
+                * K ** (2 / 3)
+                * (self.t_r / t_c) ** (1 / 3)
+                * (frame_e / cover_e) ** (1 / 9)
+            )
+
+        G = self.material.F_cy * 1088 - 5 / (
+            5.88 * (self.material.F_cy / frame_e + 0.002) ** 0.5
+        )
+
+        F_RG = N * G
+
+        return (F_RG, G)
+
     def forced_crippling(
         self,
         L: float,
@@ -500,8 +539,8 @@ class MinorFrame(Component):
         RC: float,
         f_s: float,
         f_scr: float,
-        cover_e: float = None,
-        long_e: float = None,
+        cover_e: float | None = None,
+        long_e: float | None = None,
     ) -> float:
         """Thickness from forced crippling.
 
@@ -655,28 +694,7 @@ class MinorFrame(Component):
 
         frgmax = frgmax_frg * f_rg
 
-        # Allowable ring frame stress
-        if RC <= 151.586:
-            N = (
-                (18695 + 75.238 * RC)
-                * K ** (2 / 3)
-                * (self.t_r / t_c) ** (1 / 3)
-                * (frame_e / cover_e) ** (1 / 9)
-            )
-        elif RC > 151.586:
-            N = (
-                30100
-                * K ** (2 / 3)
-                * (self.t_r / t_c) ** (1 / 3)
-                * (frame_e / cover_e) ** (1 / 9)
-            )
-
-        G = self.material.F_cy * 1088 - 5 / (
-            5.88 * (self.material.F_cy / frame_e + 0.002) ** 0.5
-        )
-
-        # Why do we not need the allowable stress, and only the allowable ratio...??
-        F_RG = N * G
+        F_RG, G = self.ring_allowable_stress(RC, K, t_c, frame_e, cover_e)
         H = A * G
 
         # Iterating for cap flange thickness, t_r
@@ -699,7 +717,7 @@ class MinorFrame(Component):
             err = t_r2 - self.t_r
             self.t_r = t_r2
 
-        return t_r2
+        return float(t_r2)
 
 
 @dataclass
@@ -752,7 +770,7 @@ class Longeron(Component):
     @property
     def rho(self) -> float:
         """Radius of gyration."""
-        return np.sqrt(self.i_xx / self.area)
+        return float(np.sqrt(self.i_xx / self.area))
 
     @property
     def area_effective(self) -> float:
@@ -841,6 +859,12 @@ class Longeron(Component):
 
         return A_l
 
+    def forced_cripping(self) -> None:
+        """Not implmented yet. Will be the same as MinorFrames."""
+        raise NotImplementedError(
+            "This will follow similar procedures at the MinorFrame."
+        )
+
 
 @dataclass
 class Bulkhead(Component):
@@ -909,7 +933,7 @@ class Bulkhead(Component):
     (An I-beam cap geometry.)
     """
 
-    def allowable_tensile_stress(self, K_r) -> float:
+    def allowable_tensile_stress(self, K_r: float) -> float:
         """The design allowable tensile stress.
 
         Returns:
@@ -928,7 +952,7 @@ class Bulkhead(Component):
             + self.p_1 * self.L**2 * (k - k**3) / 6
         )
 
-        return M_max
+        return float(M_max)
 
     def stiffener_area(self, t_s: float, H: float) -> float:
         """Area of stiffener, including effective web.
@@ -950,7 +974,7 @@ class Bulkhead(Component):
         """
         return 14 / 3 * t_s * H**3
 
-    def web_thickness(self, d: float) -> tuple:
+    def web_thickness(self, d: float) -> Tuple[float, float]:
         """Evaluate web thickness.
 
         Web sizing based on combined bending and diaphragm action between
@@ -989,7 +1013,7 @@ class Bulkhead(Component):
         H_1: float = 1.0,
         H_2: float = 5.0,
         t_s1: float = 0.025,
-    ) -> tuple:
+    ) -> Tuple[float, float, float]:
         """Stiffener spacing optimization routine.
 
         Stiffener spacing search is initiated at minimum spacing and
