@@ -10,6 +10,7 @@ from typing import Any
 from typing import Tuple
 
 import numpy as np
+from scipy.optimize import minimize_scalar
 
 from hyperstruct import Component
 
@@ -386,6 +387,9 @@ class MinorFrame(Component):
     b: float
     """cap flange width."""
 
+    construction: str
+    """Construction method. ('stringer' or 'longeron')"""
+
     t_r: float = 0.0
     """cap flange thickness."""
 
@@ -485,6 +489,596 @@ class MinorFrame(Component):
 
         return float(t_r)
 
-    def forced_crippling(self) -> float:
-        """Thickness from force crippling."""
-        return 0.0
+    def ring_allowable_stress(
+        self, RC: float, K: float, t_c: float, frame_e: float, cover_e: float
+    ) -> Tuple[float, float]:
+        """Allowable ring stress for the Forced Crippling method.
+
+        Args:
+            RC: radius of curvature
+            K: diagonal tension factor
+            t_c: cover thickness
+            frame_e: frame Young's Modulus
+            cover_e: cover Young's Modulus
+
+        Returns:
+            (F_RG, G): Frame allowable stress, emiprical factor from Bruhn
+        """
+        # Allowable ring frame stress
+        if RC <= 151.586:
+            N = (
+                (18695 + 75.238 * RC)
+                * K ** (2 / 3)
+                * (self.t_r / t_c) ** (1 / 3)
+                * (frame_e / cover_e) ** (1 / 9)
+            )
+        elif RC > 151.586:
+            N = (
+                30100
+                * K ** (2 / 3)
+                * (self.t_r / t_c) ** (1 / 3)
+                * (frame_e / cover_e) ** (1 / 9)
+            )
+
+        G = self.material.F_cy * 1088 - 5 / (
+            5.88 * (self.material.F_cy / frame_e + 0.002) ** 0.5
+        )
+
+        F_RG = N * G
+
+        return (F_RG, G)
+
+    def forced_crippling(
+        self,
+        L: float,
+        D: float,
+        M: float,
+        Z: float,
+        sum_z_sq: float,
+        t_c: float,
+        RC: float,
+        f_s: float,
+        f_scr: float,
+        cover_e: float | None = None,
+        long_e: float | None = None,
+    ) -> float:
+        """Thickness from forced crippling.
+
+        If the covers on the fuselage structure are allowed to buckle under shear loads,
+        in the buckled state these loads are supported by diagonal tension stresses.
+        Axial loads produced by cover tension field are reacted by stiffening elements
+        (minor frames, stringers) that bound the panel. Since shear loads are maximum at
+        the midpoint of the side panel, this condition is evaluated for elements on the
+        side sectors of the shell.
+
+        Basic formulations for the prevention of forced crippling failure due to the
+        postbuckled design are taken directly from Kuhn[4] and Bruhn [1]. These methods
+        have been modified to account for the condition where different materials are
+        selected for cover, longeron, and minor frame design.
+
+        Cover sizing is established to satisfy strength and other criteria within the Cover
+        class. Shear stress based on this thickness is compared against the critical shear stress
+        to determine whether the panel is critical for postbuckled strength. At this point
+        in the sizing process, longeron (stringer) area has not been established. The
+        longitudinal member area is required to define panel boundary support constraints.
+        A first approximation is made for longeron area base on vehicle bending loads.
+
+        Cover sizing is established to satisfy strength and other criteria within the Cover
+        class. Shear stress based on this thickness is compared against the critical shear stress
+        to determine whether the panel is critical for postbuckled strength. At this point
+        in the sizing process, longeron (stringer) area has not been established. The
+        longitudinal member area is required to define panel boundary support constraints.
+        A first approximation is made for longeron area base on vehicle bending loads.
+
+        Args:
+            L: Frame Spacing
+            D: Fuselage Diameter
+            M: Bending moment at the cut
+            Z: coordinate of the extreme fiber (fuselage half-depth at cut)
+            sum_z_sq: sum of longeron coordinates squared
+            t_c: Cover thickness
+            RC: Side panel radius of curvature
+            f_s: Shear stress in Cover at cut
+            f_scr: Critical shear buckling strength of Cover
+
+        Returns:
+            A bunch of floats?
+        """
+        # Longeron/Stringer area
+        A_s = M * Z / (self.material.F_cy * sum_z_sq)
+
+        # There's two rules here. The dimension ratios are capped at 2, and
+        # we need to use the larger ratio depending on the convention of construction.
+        # Typically, for Stringer systems D > L, but for Longerons L > D.
+        if D >= L:
+            if D / L > 2:
+                K = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
+            else:
+                K = np.tanh((0.5 + 300 * (t_c / RC * D / L)) * np.log10(f_s / f_scr))
+        elif L > D:
+            if L / D > 2:
+                K = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
+            else:
+                K = np.tanh((0.5 + 300 * (t_c / RC * L / D)) * np.log10(f_s / f_scr))
+        else:
+            raise ValueError(
+                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
+            )
+
+        # Angle of the folds is given an initial approximation.
+        # This is probably good enough for weights sizing, but a more exact solution involves iteration.
+        # This is the radians equivalent of 45 degrees.
+        alpha = np.pi / 4  # [rad]
+
+        # The forced crippling method is highly dependant on empirical relations.
+        # As such, the specific relations we use are dependant on the construction method.
+        # This method must be chosen from the user, but they can use it as a conceptual
+        # sizing variable permutation if they wish.
+        if not cover_e:
+            cover_e = self.material.E_c
+
+        if not long_e:
+            long_e = self.material.E_c
+
+        frame_e = self.material.E_c
+
+        # Use the same K value as before.
+        alpha_ratio = K**0.25
+
+        # A is the curve fit ordinate, Fig. 24 of ADA002867
+        A = (D / RC * np.sqrt(cover_e / f_s)) / np.sqrt(
+            1
+            + 0.5
+            * (D * t_c * cover_e / (A_s * long_e) + L * cover_e / (self.area * frame_e))
+        )
+
+        alpha_pdt = (np.pi / 4 + 0.1443 * A) / (1 + 0.175622 * A + 0.013411 * A**2)
+        alpha = alpha_pdt * alpha_ratio
+
+        # Secondary ring load: axial load in ring due to shear stress
+        P_rg = f_s * K * t_c * L * np.tan(alpha)
+
+        # Effective ring area
+        A_erg = self.area / (1 + (self.c / (2 * self.rho)) ** 2)
+
+        if self.construction == "stringer":
+            ####
+            # STRINGER CONSTRUCTION
+            ####
+
+            # Secondary stringer load: axial load in stringer due to shear stress
+            # P_st = f_s * K * np.tan(alpha) ** (-1)
+
+            # Effecting ring and cover area
+            A_edt = A_erg + 0.5 * L * t_c * (1 - K) * (cover_e / frame_e)
+
+            # Stress in the ring frame
+            f_rg = P_rg / A_edt
+            # Secondary stringer stress: axial load due to shear stress
+            # f_st = P_st / A_edt
+
+        elif self.construction == "longeron":
+            ####
+            # LONGERON CONSTRUCTION
+            ####
+
+            # Secondary stringer load: axial load in stringer due to shear stress
+            # P_st = f_s * K * t_c * D / 2 * np.tan(alpha) ** (-1)
+
+            A_est = A_s / (1 + (self.c / (2 * self.rho)) ** 2)
+
+            # Effecting ring and cover area
+            A_edt = A_est + 0.5 * D * t_c * (1 - K) * (cover_e / frame_e)
+
+            # Stress in the ring frame
+            f_rg = P_rg / A_edt
+            # Secondary longeron stress: axial load in longeron due to shear stress
+            # f_st = P_st / A_edt
+
+        else:
+            raise AttributeError(
+                "The MinorFrame attribute 'construction' is not properly defined. Acceptable options are 'stringer' or 'longeron'"
+            )
+
+        # Max stress in the frame is based on an empirical relation from Bruhn.
+        # This is dependent on the ratio of frame/longeron spacing.
+        # This relation applies for both the applied stress, f, and the allowable stress, F.
+        if L / D <= 1.2:
+            frgmax_frg = 1 + 0.78 * (1 - K) - 0.65 * L / D * (1 - K)
+        elif L / D > 1.2:
+            frgmax_frg = 1.0
+        else:
+            raise ValueError(
+                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
+            )
+
+        frgmax = frgmax_frg * f_rg
+
+        F_RG, G = self.ring_allowable_stress(RC, K, t_c, frame_e, cover_e)
+        H = A * G
+
+        # Iterating for cap flange thickness, t_r
+        x_c = 0.5 * (1 - K) * cover_e / self.material.E_c
+        x_b = (4 * self.b + self.c / 2) / (
+            (1 + (self.c / (2 * self.rho)) ** 2) * L * t_c
+        )
+        x_a = ((f_s * np.tan(alpha) / H) * (frgmax / F_RG)) ** 3 * t_c * K
+
+        # An initialization for optimizing
+        err = 100
+        while err > 0.1:
+            t_r2 = self.t_r - (
+                (self.t_r * (self.t_r * x_b + x_c) ** 3 + x_a)
+                / (
+                    3 * x_b * self.t_r * (self.t_r * x_b + x_c) ** 2
+                    + (self.t_r * x_b + x_c) ** 3
+                )
+            )
+            err = t_r2 - self.t_r
+            self.t_r = t_r2
+
+        return float(t_r2)
+
+
+@dataclass
+class Longeron(Component):
+    """Fuselage longitudinal member component.
+
+    Longitudinal Members include both Stringers and Longerons. The Longitudinal Member
+    sizing is determined to satisfy minimum area, forced crippling, bending strength,
+    and stiffness requirements. The methods account for differences in Cover, Longeron,
+    and MinorFrame materials, and the effects of cutouts.
+
+    The flange width is set up to equal the web height, and the thickness is assumed
+    to be constant across the section. This primarily simplifies
+    some of the calculations, and should be sufficient for weight estimates.
+    """
+
+    b: float
+    """Web Height, and Flange Width."""
+
+    t_s: float
+    """Longeron thickness."""
+
+    k: float
+    """Inner flange proportion of web height."""
+
+    @property
+    def area(self) -> float:
+        """Cross-sectional area."""
+        return self.t_s * self.b * (3 + self.k)
+
+    @property
+    def e(self) -> float:
+        """Eccentricity."""
+        return self.b * (0.5 + self.k / (3 + self.k))
+
+    @property
+    def i_xx(self) -> float:
+        """Second moment of area (moment of inertia), strong-axis."""
+        return (
+            self.t_s
+            * self.b
+            * (
+                2 * self.e**2
+                + self.b**2 / 12
+                + (0.5 * self.b - self.e) ** 2
+                + self.k * (self.b - self.e) ** 2
+            )
+        )
+
+    @property
+    def rho(self) -> float:
+        """Radius of gyration."""
+        return float(np.sqrt(self.i_xx / self.area))
+
+    @property
+    def area_effective(self) -> float:
+        """Effective area."""
+        return self.area / (1 + (self.e / self.rho) ** 2)
+
+    def bending_strength(
+        self,
+        M_ext: float,
+        t: float,
+        d: float,
+        I_t: float,
+        l_p: float,
+        rtu: float,
+        A_s: float,
+        I_a: float,
+    ) -> float:
+        """Thickness required to satisfy bending strength.
+
+        Longitudinal member sizing is dependent on the contribution of all
+        copmonents that resist bending loads. This method accounts for the difference
+        in behavior of cover elements under tension load versus the behavior in
+        compression. Cover material, should it differ from longeron material, can
+        also have different strength and elastic properties.
+
+        The assumption that plane sections remain plane simplifies the estimating
+        approach. The practice of using a Design Ultimate Factor of Safety of 1.5
+        in analysis and metal deformation characteristics results in stresses at
+        limit load occurring in the elastic range.
+
+        The stress at any point on the shell is then proportional to the extreme
+        fiber stress according to the relationship of vertical coordinate versus
+        extreme fiber coordinate.
+
+        Bending moment is assumed to be reactied by an internal coupled force system.
+        Thus, in the case of down-bending, the uper half of the shell sustains tension
+        loads, and the lower half, compression loads; half of the moment is reacted
+        in each half. Covers are totally effective in the tension sector of the
+        fuselage. Cutouts eliminate cover contributions; proximity to cutouts degrade
+        the effectiveness of the cover. The width of cutouts at other synthesis cuts
+        combined with longitudinal displacement and hsear lag slope of 2 to 1 is used
+        to determine the apparent effective width.
+
+        Args:
+            M_ext: External moment at the cut
+            t: cover thickness
+            d: fuselage depth
+            I_t: cover moment of inertia, as a function of thickness
+            l_p: cover peripheral length
+            rtu: apparent panel degradation due to cutout proximity
+            A_s: stringer/longeron area
+            I_a: side stringer moment of inertia aa a funciton of area
+
+        Returns:
+            A_l: area that satisfies the bending strength requirement
+        """
+        # Max allowable extreme fiber stresses
+        # Longeron/Stringer
+        f_max_l = 0.9 * self.material.F_cy
+        # Cover
+        f_max_c = 0.76 * self.material.F_tu
+
+        # Moment reacted by the upper cover in tension
+        M_c = t * (f_max_c / (d / 2)) * I_t * (l_p - rtu / l_p)
+
+        # Moment reacted by the upper side panel stringers
+        M_s = A_s * f_max_l * I_a / (0.5 * d)
+
+        # TODO: Secondary side stringer contribution
+        # Calculated in the same manner as primary side stringers
+        M_sl = 0.0
+
+        # Moment reacted by longerons
+        M_l = 0.5 * M_ext - M_c - M_s - M_sl
+
+        # Longeron area to resist this moment
+        A_l = M_l * 0.5 * d / (f_max_l * self.i_xx / self.area)
+
+        # Now the compression sector is evaluated
+        # Effectiveness of cover in compression is based on Peery curved panel buckling
+        # F_CCR = ( 9*(t_c/R)**(5/3) + 0.16*(t_c/L)**(1.3) + K_c*np.pi**2/(12*(1-nu_c**2)) ) * cover_e
+
+        # ... needs more code ... #
+
+        #
+
+        return A_l
+
+    def forced_cripping(self) -> None:
+        """Not implmented yet. Will be the same as MinorFrames."""
+        raise NotImplementedError(
+            "This will follow similar procedures at the MinorFrame."
+        )
+
+
+@dataclass
+class Bulkhead(Component):
+    """Fuselage pressure bulkhead component.
+
+    Pressure bulkhead are located at structural synthesis cuts by the user-
+    determined input. Assumptions used in this approach are:
+        1.  Construction is stiffened sheet design simply supported around
+            the periphery.
+        2.  Strip theory provides an adequate definition of maximum bending
+            moment.
+        3.  Stiffeners are of constant cross section basedon the maxium bending
+            moment, at equal spacings, and oriented parallel to the shortest
+            bulkhead dimension.
+        4.  Web thickness base don maximum pressure is constant throughout the
+            bulkhead surface.
+        5.  Minor frame material is used for bulkhead construction.
+
+    There are 3 assumed pressure loading types: Uniform, Triangular, and
+    Trapezoidal. Uniform loading occurs from cabin or equipment compartment
+    pressurization. Triangular occurs from fuel head. Trapezoidal loadings
+    result from the combinations of fuel head and vent pressure. Fuel pressure
+    results from the vehicle maneuver such that both positive and negative
+    maneuvers are examined.
+    """
+
+    duf: float
+    """Design Ultimate Factor.
+
+    (2.0 for personnel environment, 1.5 for equipment)
+    """
+
+    K_r: float
+    """Fatigue reduction factor (percent of Ftu)"""
+
+    p_1: float
+    """Triangular pressure."""
+
+    p_2: float
+    """Uniform pressure."""
+
+    L: float
+    """Height of pressurized surface."""
+
+    t_w: float
+    """Web field thickness.
+
+    (Webs are assumed to be milled.)
+    """
+
+    t_l: float
+    """Web land thickness.
+
+    (Webs are assumed to be milled.)
+    """
+
+    d: float
+    """Stiffener spacing."""
+
+    t_s: float
+    """Stiffener web thickness."""
+
+    H: float
+    """Stiffener cap width.
+
+    (An I-beam cap geometry.)
+    """
+
+    def allowable_tensile_stress(self, K_r: float) -> float:
+        """The design allowable tensile stress.
+
+        Returns:
+            f_t: design allowable tensile stress
+        """
+        return min(self.material.F_tu / self.duf, K_r * self.material.F_tu)
+
+    def max_bending_moment(self) -> float:
+        """Bending moment per unit width for the pressure loading."""
+        x = -self.L * self.p_2 + self.L * np.sqrt(
+            self.p_2**2 + self.p_2 * self.p_1 + (self.p_1**2) / 3
+        ) * self.p_1 ** (-1)
+        k = x / self.L
+        M_max = (
+            self.p_2 * self.L**2 * 0.5 * (k - k**2)
+            + self.p_1 * self.L**2 * (k - k**3) / 6
+        )
+
+        return float(M_max)
+
+    def stiffener_area(self, t_s: float, H: float) -> float:
+        """Area of stiffener, including effective web.
+
+        Args:
+            t_s: stiffener thickness
+            H: stiffener cap width
+        """
+        return 6 * t_s * H
+
+    def stiffener_inertia(self, t_s: float, H: float) -> float:
+        """Second moment of area of stiffener, including effective web.
+
+        Second order therms of thickness are assumed to be negligible.
+
+        Args:
+            t_s: stiffener thickness
+            H: stiffener cap width
+        """
+        return 14 / 3 * t_s * H**3
+
+    def web_thickness(self, d: float) -> Tuple[float, float]:
+        """Evaluate web thickness.
+
+        Web sizing based on combined bending and diaphragm action between
+        stiffeners. Webs are assumed to be milled between supports. Thicknesses
+        are derived by curve-fit approximation of theoretical plots (same
+        analytical method as Cover diaphragm sizing).
+
+        Args:
+            d: stiffener spacing
+
+        Returns:
+            (t_w, t_l): Web field thickness, Web land thickness
+        """
+        t_w = (
+            1.3769
+            * d
+            * (self.p_1 + self.p_2) ** 2.484
+            * self.material.E**1.984
+            / self.allowable_tensile_stress(self.K_r) ** 4.467
+        )
+
+        t_l = (
+            1.646
+            * d
+            * (self.p_1 + self.p_2) ** 0.894
+            * self.material.E**0.394
+            / self.allowable_tensile_stress(self.K_r) ** 1.288
+        )
+
+        return (t_w, t_l)
+
+    def stiffener_spacing(
+        self,
+        d_1: float = 2.0,
+        d_2: float = 12.0,
+        H_1: float = 1.0,
+        H_2: float = 5.0,
+        t_s1: float = 0.025,
+    ) -> Tuple[float, float, float]:
+        """Stiffener spacing optimization routine.
+
+        Stiffener spacing search is initiated at minimum spacing and
+        continued at fixed increments where three values of effective thickness
+        are obtained. A three-point curve fit solution is used to determine
+        the optimum spacing.
+
+        Args:
+            d_1: spacing lower bound
+            d_2: spacing upper bound
+            H_1: width lower bound
+            H_2: width upper bound
+            t_s1: min gauge thickness
+
+        Returns:
+            t_s: minimum stiffener thickness
+            d: stiffener spacing for minimum thickness
+            H: stiffener width for minimum thickness
+        """
+        x = np.linspace(d_1, d_2, num=5)
+        y = []
+
+        # Flange crippling set to compressive yield stress
+        # fcc = 0.312*np.sqrt(self.material.F_cy*self.material.E_c)*(4*self.t_s/H_i)**(3/4)
+        B = self.material.F_cy / (
+            0.312 * np.sqrt(self.material.F_cy * self.material.E_c)
+        )
+
+        for d_i in x:
+            t_w, t_l = self.web_thickness(d_i)
+
+            t_s = (
+                3
+                * self.max_bending_moment()
+                * B ** (8 / 3)
+                / (224 * self.material.F_cy)
+            ) ** (1 / 3)
+            H = 4 * t_s / B ** (4 / 3)
+            t_bar = (
+                t_w
+                + (1.1 * H * (t_l - t_w) / d_i)
+                + ((4 * H * t_s + H * (2 * t_s - t_l)) / d_i)
+            )
+            y.append(t_bar)
+            print(f"{d_i:>4.1f}, {t_s:.4f}, {t_w:.4f}, {t_bar:.3f}")
+
+        # calculate polynomial
+        z = np.polyfit(x, y, 3)
+        f = np.poly1d(z)
+
+        # minimum equivalent thickness
+        res = minimize_scalar(f, bounds=(d_1, d_2), method="bounded")
+        # The minimum t_bar
+        t_bar = res.fun
+        d = res.x
+        t_s = t_s1 if t_s <= t_s1 else t_s
+        H = 4 * t_s / B ** (4 / 3)
+
+        if H < H_1:
+            raise ValueError(
+                f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
+            )
+        elif H > H_2:
+            raise ValueError(
+                f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
+            )
+
+        return (t_s, d, H)

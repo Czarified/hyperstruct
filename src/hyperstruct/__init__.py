@@ -15,6 +15,9 @@ class Material:
     It also contains thermomechanical curves for environmental correction factors.
     """
 
+    rho: float
+    """Weight density (aka specific weight)"""
+
     E: float
     """Young's Modulus, tension."""
 
