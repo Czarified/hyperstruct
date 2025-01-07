@@ -528,6 +528,43 @@ class MinorFrame(Component):
 
         return (F_RG, G)
 
+    def diagonal_factor(
+        self, D: float, L: float, t_c: float, RC: float, f_s: float, f_scr: float
+    ) -> float:
+        """Calculate the diagonal tension factor.
+
+        There's two rules here. The dimension ratios are capped at 2, and
+        we need to use the larger ratio depending on the convention of construction.
+        Typically, for Stringer systems D > L, but for Longerons L > D.
+
+        Args:
+            D: Fuselage Diameter
+            L: Frame Spacing
+            t_c: Cover thickness
+            RC: Side panel radius of curvature
+            f_s: Shear stress in Cover at cut
+            f_scr: Critical shear buckling strength of Cover
+
+        Returns:
+            K: Diagonal Tension factor, from empirical relations.
+        """
+        if D >= L:
+            if D / L > 2:
+                k = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
+            else:
+                k = np.tanh((0.5 + 300 * (t_c / RC * D / L)) * np.log10(f_s / f_scr))
+        elif L > D:
+            if L / D > 2:
+                k = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
+            else:
+                k = np.tanh((0.5 + 300 * (t_c / RC * L / D)) * np.log10(f_s / f_scr))
+        else:
+            raise ValueError(
+                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
+            )
+
+        return float(k)
+
     def forced_crippling(
         self,
         L: float,
@@ -587,23 +624,7 @@ class MinorFrame(Component):
         # Longeron/Stringer area
         A_s = M * Z / (self.material.F_cy * sum_z_sq)
 
-        # There's two rules here. The dimension ratios are capped at 2, and
-        # we need to use the larger ratio depending on the convention of construction.
-        # Typically, for Stringer systems D > L, but for Longerons L > D.
-        if D >= L:
-            if D / L > 2:
-                K = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
-            else:
-                K = np.tanh((0.5 + 300 * (t_c / RC * D / L)) * np.log10(f_s / f_scr))
-        elif L > D:
-            if L / D > 2:
-                K = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
-            else:
-                K = np.tanh((0.5 + 300 * (t_c / RC * L / D)) * np.log10(f_s / f_scr))
-        else:
-            raise ValueError(
-                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
-            )
+        K = self.diagonal_factor(D, L, t_c, RC, f_s, f_scr)
 
         # Angle of the folds is given an initial approximation.
         # This is probably good enough for weights sizing, but a more exact solution involves iteration.
