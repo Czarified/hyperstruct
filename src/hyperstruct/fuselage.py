@@ -495,14 +495,15 @@ class MinorFrame(Component):
         """Allowable ring stress for the Forced Crippling method.
 
         Args:
-            RC: radius of curvature
-            K: diagonal tension factor
-            t_c: cover thickness
-            frame_e: frame Young's Modulus
-            cover_e: cover Young's Modulus
+            RC: Radius of curvature
+            K: Diagonal tension factor
+            t_c: Cover thickness
+            frame_e: Frame Young's Modulus
+            cover_e: Cover Young's Modulus
 
         Returns:
-            (F_RG, G): Frame allowable stress, emiprical factor from Bruhn
+            A tuple of (F_RG, G), Frame allowable stress,
+            and emiprical factor from Bruhn.
         """
         # Allowable ring frame stress
         if RC <= 151.586:
@@ -527,6 +528,46 @@ class MinorFrame(Component):
         F_RG = N * G
 
         return (F_RG, G)
+
+    def diagonal_factor(
+        self, D: float, L: float, t_c: float, RC: float, f_s: float, f_scr: float
+    ) -> float:
+        """Calculate the diagonal tension factor.
+
+        There's two rules here. The dimension ratios are capped at 2, and
+        we need to use the larger ratio depending on the convention of construction.
+        Typically, for Stringer systems D > L, but for Longerons L > D.
+
+        Args:
+            D: Fuselage Diameter
+            L: Frame Spacing
+            t_c: Cover thickness
+            RC: Side panel radius of curvature
+            f_s: Shear stress in Cover at cut
+            f_scr: Critical shear buckling strength of Cover
+
+        Returns:
+            Diagonal Tension factor, K, from empirical relations.
+
+        Raises:
+            ValueError: An error occurred comparing values of D and L.
+        """
+        if D >= L:
+            if D / L > 2:
+                k = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
+            else:
+                k = np.tanh((0.5 + 300 * (t_c / RC * D / L)) * np.log10(f_s / f_scr))
+        elif L > D:
+            if L / D > 2:
+                k = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
+            else:
+                k = np.tanh((0.5 + 300 * (t_c / RC * L / D)) * np.log10(f_s / f_scr))
+        else:
+            raise ValueError(
+                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
+            )
+
+        return float(k)
 
     def forced_crippling(
         self,
@@ -580,30 +621,20 @@ class MinorFrame(Component):
             RC: Side panel radius of curvature
             f_s: Shear stress in Cover at cut
             f_scr: Critical shear buckling strength of Cover
+            cover_e: Cover Young's Modulus
+            long_e: Longeron Young's Modulus
 
         Returns:
             A bunch of floats?
+
+        Raises:
+            AttributeError: The construction attribute is not properly defined.
+            ValueError: D and L cannot be successfully compared.
         """
         # Longeron/Stringer area
         A_s = M * Z / (self.material.F_cy * sum_z_sq)
 
-        # There's two rules here. The dimension ratios are capped at 2, and
-        # we need to use the larger ratio depending on the convention of construction.
-        # Typically, for Stringer systems D > L, but for Longerons L > D.
-        if D >= L:
-            if D / L > 2:
-                K = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
-            else:
-                K = np.tanh((0.5 + 300 * (t_c / RC * D / L)) * np.log10(f_s / f_scr))
-        elif L > D:
-            if L / D > 2:
-                K = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
-            else:
-                K = np.tanh((0.5 + 300 * (t_c / RC * L / D)) * np.log10(f_s / f_scr))
-        else:
-            raise ValueError(
-                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
-            )
+        K = self.diagonal_factor(D, L, t_c, RC, f_s, f_scr)
 
         # Angle of the folds is given an initial approximation.
         # This is probably good enough for weights sizing, but a more exact solution involves iteration.
@@ -825,7 +856,7 @@ class Longeron(Component):
             I_a: side stringer moment of inertia aa a funciton of area
 
         Returns:
-            A_l: area that satisfies the bending strength requirement
+            Float of area, A_1, that satisfies the bending strength requirement
         """
         # Max allowable extreme fiber stresses
         # Longeron/Stringer
@@ -936,8 +967,11 @@ class Bulkhead(Component):
     def allowable_tensile_stress(self, K_r: float) -> float:
         """The design allowable tensile stress.
 
+        Args:
+            K_r: Fatigue reduction factor (percent of Ftu).
+
         Returns:
-            f_t: design allowable tensile stress
+            Float of design allowable tensile stress, F_t.
         """
         return min(self.material.F_tu / self.duf, K_r * self.material.F_tu)
 
@@ -960,17 +994,23 @@ class Bulkhead(Component):
         Args:
             t_s: stiffener thickness
             H: stiffener cap width
+
+        Returns:
+            Float of calculated area.
         """
         return 6 * t_s * H
 
     def stiffener_inertia(self, t_s: float, H: float) -> float:
         """Second moment of area of stiffener, including effective web.
 
-        Second order therms of thickness are assumed to be negligible.
+        Second order terms of thickness are assumed to be negligible.
 
         Args:
             t_s: stiffener thickness
             H: stiffener cap width
+
+        Returns:
+            Float of second moment of area.
         """
         return 14 / 3 * t_s * H**3
 
@@ -1032,6 +1072,9 @@ class Bulkhead(Component):
             t_s: minimum stiffener thickness
             d: stiffener spacing for minimum thickness
             H: stiffener width for minimum thickness
+
+        Raises:
+            ValueError: Converged thickness does not result in spacing within bounds.
         """
         x = np.linspace(d_1, d_2, num=5)
         y = []
