@@ -13,7 +13,7 @@ jobs:
       matrix:
         include:
           - { python: "3.12", os: "ubuntu-latest", session: "pre-commit" }
-          - { python: "3.12", os: "ubuntu-latest", session: "safety" }
+          # - { python: "3.12", os: "ubuntu-latest", session: "safety" }
           - { python: "3.12", os: "ubuntu-latest", session: "mypy" }
           - { python: "3.11", os: "ubuntu-latest", session: "mypy" }
           - { python: "3.10", os: "ubuntu-latest", session: "mypy" }
@@ -97,13 +97,6 @@ jobs:
         run: |
           nox --python=${{ matrix.python }}
 
-      - name: Run Safety CLI to check for vulnerabilities
-        if: matrix.session == 'safety'
-        uses: pyupio/safety-action@v1
-        with:
-          api-key: ${{ secrets.SAFETY_API_KEY }}
-          args: --detailed-output
-
       - name: Upload coverage data
         if: always() && matrix.session == 'tests'
         uses: "actions/upload-artifact@v4"
@@ -118,6 +111,16 @@ jobs:
           name: docs
           path: docs/_build
 
+  safety:
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+    - name: Run Safety CLI to check for vulnerabilities
+      uses: pyupio/safety-action@v1
+      with:
+        api-key: ${{ secrets.SAFETY_API_KEY }}
+        args: --detailed-output
+        
   coverage:
     runs-on: ubuntu-latest
     needs: tests
