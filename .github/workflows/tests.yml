@@ -93,16 +93,16 @@ jobs:
           restore-keys: |
             ${{ steps.pre-commit-cache.outputs.result }}-
 
+      - name: Run Nox
+        run: |
+          nox --python=${{ matrix.python }}
+
       - name: Run Safety CLI to check for vulnerabilities
         if: matrix.session == 'safety'
         uses: pyupio/safety-action@v1
         with:
           api-key: ${{ secrets.SAFETY_API_KEY }}
           args: --detailed-output
-
-      - name: Run Nox
-        run: |
-          nox --python=${{ matrix.python }}
 
       - name: Upload coverage data
         if: always() && matrix.session == 'tests'
