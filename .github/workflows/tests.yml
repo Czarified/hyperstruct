@@ -115,12 +115,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: tests
     steps:
-    - name: Run Safety CLI to check for vulnerabilities
-      uses: pyupio/safety-action@v1
-      with:
-        api-key: ${{ secrets.SAFETY_API_KEY }}
-        args: --detailed-output
-        
+      - name: Run Safety CLI to check for vulnerabilities
+        uses: pyupio/safety-action@v1
+        with:
+          api-key: ${{ secrets.SAFETY_API_KEY }}
+          args: --detailed-output
+
   coverage:
     runs-on: ubuntu-latest
     needs: tests
