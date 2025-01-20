@@ -1161,8 +1161,8 @@ class Fuselage:
     described stations.
     """
 
-    conditions: list
-    """A set of load conditions for evaluation."""
-
-    nose: str
+    nose: Station
     """Geometry definition at the Nose Station."""
+
+    tail: Station
+    """Geometry definition at the Tail Station."""
