@@ -170,7 +170,6 @@ def tests(session: Session) -> None:
             "--parallel",
             "-m",
             "pytest",
-            "--debug=dataio",
             *session.posargs,
         )
     finally:
