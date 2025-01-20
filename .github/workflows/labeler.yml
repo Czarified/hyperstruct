@@ -11,14 +11,14 @@ jobs:
     permissions:
       actions: read
       contents: read
-      issues: write # <--- permission granted explicitely
+      issues: write # <--- permission granted explicitly
       security-events: write
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
 
       - name: Run Labeler
-        uses: crazy-max/ghaction-github-labeler@v5.1.0
+        uses: crazy-max/ghaction-github-labeler@v5.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           skip-delete: true
