@@ -144,7 +144,7 @@ def safety(session: Session) -> None:
     """Scan dependencies for insecure packages."""
     requirements = session.poetry.export_requirements()
     session.install("safety")
-    session.run("safety", "check", "--full-report", f"--file={requirements}")
+    session.run("safety", "scan", "--full-report", f"--file={requirements}")
 
 
 @session(python=python_versions)
@@ -164,7 +164,14 @@ def tests(session: Session) -> None:
     session.install(".")
     session.install("coverage[toml]", "pytest", "pygments")
     try:
-        session.run("coverage", "run", "--parallel", "-m", "pytest", *session.posargs)
+        session.run(
+            "coverage",
+            "run",
+            "--parallel",
+            "-m",
+            "pytest",
+            *session.posargs,
+        )
     finally:
         if session.interactive:
             session.notify("coverage", posargs=[])

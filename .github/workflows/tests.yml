@@ -13,7 +13,7 @@ jobs:
       matrix:
         include:
           - { python: "3.12", os: "ubuntu-latest", session: "pre-commit" }
-          - { python: "3.12", os: "ubuntu-latest", session: "safety" }
+          # - { python: "3.12", os: "ubuntu-latest", session: "safety" }
           - { python: "3.12", os: "ubuntu-latest", session: "mypy" }
           - { python: "3.11", os: "ubuntu-latest", session: "mypy" }
           - { python: "3.10", os: "ubuntu-latest", session: "mypy" }
@@ -101,8 +101,10 @@ jobs:
         if: always() && matrix.session == 'tests'
         uses: "actions/upload-artifact@v4"
         with:
-          name: coverage-data-${{ matrix.python}}-${{ matrix.os }}
-          path: ".coverage.*"
+          name: coverage-data-${{matrix.python}}-${{matrix.os}}
+          include-hidden-files: true
+          path: .coverage.*
+          if-no-files-found: error
 
       - name: Upload documentation
         if: matrix.session == 'docs-build'
@@ -110,6 +112,53 @@ jobs:
         with:
           name: docs
           path: docs/_build
+
+  safety:
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Upgrade pip
+        run: |
+          pip install --constraint=.github/workflows/constraints.txt pip "pipx==1.4.3"
+          pip --version
+
+      - name: Upgrade pip in virtual environments
+        shell: python
+        run: |
+          import os
+          import pip
+
+          with open(os.environ["GITHUB_ENV"], mode="a") as io:
+              print(f"VIRTUALENV_PIP={pip.__version__}", file=io)
+
+      - name: Install Poetry
+        shell: bash
+        run: |
+          pipx --version
+          pipx install --pip-args=--constraint=.github/workflows/constraints.txt poetry
+          pipx inject poetry poetry-plugin-export
+          poetry --version
+
+      - name: Install Nox
+        shell: bash
+        run: |
+          pipx install --pip-args=--constraint=.github/workflows/constraints.txt nox
+          pipx inject --pip-args=--constraint=.github/workflows/constraints.txt nox nox-poetry
+          nox --version
+
+      - name: Run Safety CLI to check for vulnerabilities
+        uses: pyupio/safety-action@v1
+        with:
+          api-key: ${{ secrets.SAFETY_API_KEY }}
+          args: --detailed-output
 
   coverage:
     runs-on: ubuntu-latest
@@ -131,6 +180,7 @@ jobs:
       - name: Install Poetry
         run: |
           pipx install --pip-args=--constraint=.github/workflows/constraints.txt poetry
+          pipx inject poetry poetry-plugin-export
           poetry --version
 
       - name: Install Nox

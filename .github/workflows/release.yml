@@ -31,12 +31,19 @@ jobs:
       - name: Install Poetry
         run: |
           pip install --constraint=.github/workflows/constraints.txt poetry
+          pipx inject poetry poetry-plugin-export
           poetry --version
 
       - name: Check if there is a parent commit
         id: check-parent-commit
         run: |
           echo "::set-output name=sha::$(git rev-parse --verify --quiet HEAD^)"
+
+      - name: Run Safety CLI to check for vulnerabilities
+        uses: pyupio/safety-action@v1
+        with:
+          api-key: ${{ secrets.SAFETY_API_KEY }}
+          args: --detailed-output
 
       - name: Detect and tag new version
         id: check-version
