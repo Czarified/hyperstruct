@@ -165,7 +165,13 @@ def tests(session: Session) -> None:
     session.install("coverage[toml]", "pytest", "pygments")
     try:
         session.run(
-            "coverage", "run", "--parallel", "-m", "pytest", *session.posargs
+            "coverage",
+            "run",
+            "--parallel",
+            "-m",
+            "pytest",
+            "--debug=dataio",
+            *session.posargs,
         )
     finally:
         if session.interactive:
