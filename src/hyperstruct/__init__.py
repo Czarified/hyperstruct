@@ -72,3 +72,29 @@ class Component:
         """
         # This doesn't work. It's just a placeholder.
         pass
+
+
+@dataclass
+class Station:
+    """The basic foundation for cross-sectional geometry.
+
+    The station class provides functionality to define a cross-sectional shape,
+    and location of that shape. These definitions are needed for multi-station
+    analysis methods, such as the fuselage shell structure.
+
+    Each Station class has an orientation system (FS, BL, WL), name, station
+    number, and geometry definition.
+    """
+
+    # This may not be necessary. Useful for Ben's reference.
+    orientation: str
+    """Fuselage Station, Butt Line, or Water Line."""
+
+    name: str
+    """A reference designation for this Station (e.g. Nose/Tail/MLG Trunnion)."""
+
+    number: float
+    """The station number. Measurement from the vehicle origin to the station plane."""
+
+    geometry: float
+    """The cross-sectional definition."""

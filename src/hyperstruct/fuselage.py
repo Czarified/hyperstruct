@@ -13,6 +13,7 @@ import numpy as np
 from scipy.optimize import minimize_scalar
 
 from hyperstruct import Component
+from hyperstruct import Station
 
 
 @dataclass
@@ -1125,3 +1126,43 @@ class Bulkhead(Component):
             )
 
         return (t_s, d, H)
+
+
+@dataclass
+class Fuselage:
+    """A Fuselage assembly.
+
+    The fuselage structural components serve a wide range of functions. For the purposes of weight
+    estimating and accounting, these structural components are categorized as either basic or
+    secondary structure according to the definitions in MIL-STD-1374. The weight estimating
+    approach is based on calculating weights at the line item level of the detail weight
+    statement report form.
+
+    The program estimates basic structure weight by sizing structural members to strength,
+    stiffness, fatigue, and manufacturing requirements. These requirements are established
+    through the analysis of design criteria, engineering data, and vehicle geometry.
+    As such, there are a SIGNIFICANT number of inputs involved.
+
+    The approach to sizing shell structure (cover, minor frames, longerons or stringers)
+    is that of a multistation analysis. Bulkheads and major frames are sized to their
+    individual load requirements. The weights of these basic structure elements are
+    sensitive to factors such as geometry, type of construction, material properties,
+    temperature, loads (and loading criteria), acoustic fatigue, local panel flutter,
+    cutout size and location, stiffness requirements, and manufacturing limitations.
+
+    Secondary structure component weight are estimated by rule-of-thumb and empirical methods.
+    The weights of these items are sensitive to factors such as vehicle type and usage,
+    design criteria, specific item function, and dimensional data.
+
+    For multistation analysis: The external shell sectional geometry is represented as
+    a family of shapes (rounded rectangles). External geometry is described at the nose,
+    tail, and 8 intermediate stations. Shell structure is evaluate at a maximum of 19
+    synthesis cuts, for which geometry is determined by interpolation between the
+    described stations.
+    """
+
+    conditions: list
+    """A set of load conditions for evaluation."""
+
+    nose: str
+    """Geometry definition at the Nose Station."""
