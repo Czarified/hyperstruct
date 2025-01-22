@@ -4,7 +4,7 @@ This page outlines some of the basic theory behind hyperstruct. It will be updat
 since all the methods are _extremely_ complicated.
 
 As mentioned in the README page, HyperStruct is a modern implementation of the SWEEP software originally produced
-by Rockwell International in 1974 {cite}`@ascani_structural_nodate`. The Structural Weight Estimation Program for Aircraft (SWEEP) was originally
+by Rockwell International in 1974 {cite}`ascani_executive_1974`. The Structural Weight Estimation Program for Aircraft (SWEEP) was originally
 implemented in FORTRAN. The source code for this program is no longer publicly available, but
 the US Defence Technical Information Center has published all the original
 documentation from Rockwell (which is extensive).
@@ -61,7 +61,8 @@ Stations are important, since they give the panel dimensions for Cover analysis.
 length is an evaluated arc length for 1 of 3 sectors: Upper, Lower, and Side (both sides are
 sized equally).
 
+## References
 
 ```{bibliography}
-:filter: docname in docnames
+
 ```
