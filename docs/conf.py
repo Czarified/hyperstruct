@@ -8,6 +8,8 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_click",
     "myst_parser",
+    "sphinxcontrib.bibtex",
 ]
+bibtex_bibfiles = ["references.bib"]
 autodoc_typehints = "description"
 html_theme = "furo"

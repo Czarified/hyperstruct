@@ -37,17 +37,25 @@ Request features on the [Issue Tracker].
 
 ## How to set up your development environment
 
-You need Python 3.7+ and the following tools:
+You need Python 3.10+ and the following tools:
 
 - [Poetry]
+- [poetry-export-plugin]
 - [Nox]
 - [nox-poetry]
 
-Install the package with development requirements:
+The general steps are:
 
-```console
-$ poetry install
-```
+1.  Make sure you have the above tools installed.
+2.  Clone the repository locally.
+3.  Navigate to the cloned directory in your terminal.
+4.  Install the package with development requirements:
+
+    ```console
+    $ poetry install --with dev
+    ```
+
+5.  Verify you have the latest version
 
 You can now run an interactive Python session,
 or the command-line interface:
@@ -58,28 +66,42 @@ $ poetry run hyperstruct
 ```
 
 [poetry]: https://python-poetry.org/
+[poetry-export-plugin]: https://github.com/python-poetry/poetry-plugin-export
 [nox]: https://nox.thea.codes/
 [nox-poetry]: https://nox-poetry.readthedocs.io/
 
 ## How to test the project
 
+Run the partial test suite:
+
+```console
+$ poetry run pytest
+```
+
 Run the full test suite:
 
 ```console
-$ nox
+$ poetry run nox
 ```
 
 List the available Nox sessions:
 
 ```console
-$ nox --list-sessions
+$ poetry run nox --list-sessions
 ```
 
 You can also run a specific Nox session.
 For example, invoke the unit test suite like this:
 
 ```console
-$ nox --session=tests
+$ poetry run nox --session=tests
+```
+
+Running the full nox suite by default will rebuild all virtual environments. This is pretty slow, and most of the time unnecessary.
+So, if you want to reuse the previously-built environments, you can add the -r flag:
+
+```console
+$ poetry run nox -r
 ```
 
 Unit tests are located in the _tests_ directory,
@@ -94,15 +116,15 @@ Open a [pull request] to submit changes to this project.
 Your pull request needs to meet the following guidelines for acceptance:
 
 - The Nox test suite must pass without errors and warnings.
-- Include unit tests. This project maintains 100% code coverage.
+- Include unit tests. This project aims for 100% code coverage.
 - If your changes add functionality, update the documentation accordingly.
 
-Feel free to submit early, though—we can always iterate on this.
+Feel free to submit early, though we can always iterate on this.
 
 To run linting and code formatting checks before committing your change, you can install pre-commit as a Git hook by running the following command:
 
 ```console
-$ nox --session=pre-commit -- install
+$ poetry run nox --session=pre-commit -- install
 ```
 
 It is recommended to open an issue before starting work on anything.
