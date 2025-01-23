@@ -36,13 +36,23 @@ estimates, with flexiblity to a plethora of design variables. All of this
 is predominantly derived from fundamental structural methods, or historically
 predicated empirical formulas.
 
-## Features
+## Cuurrent Status
 
-- TODO
+- 😬 Not much! This project requires a lot of boilerplate before any meaningful results or demos.
+- A major goal for 2025 is a functional demo of at least the Fuselage methods! Stay tuned!
+- Even without the aircraft or fuselage synthesis routines, the fuselage component classes can
+  still be used to size Cover panels (without cutouts), and pressure bulkheads. This includes sizing
+  Covers for local panel flutter and acoustic fatigue!
 
-## Requirements
+## Roadmap
 
-- TODO
+- The majority of work at the moment revolves around the Fuselage synthesis. It is considered the
+  second most complicated assembly for weight prediction, surpassed only by the Wing (there's more than 3
+  volumes of documentation Rockwell dedicated to that guy!).
+- After a functional Fuselage primary structure module, and perhaps started before in support of the synthesis methods,
+  the Airloads module will be worked to derive external loading on the aircraft from basic mission requirements.
+- From that point, it may be beneficial to focus on the "simpler" sizing methods such as secondary structure,
+  or Landing Gear (things that are mostly empirical or straight forward for weight approximations).
 
 ## Installation
 
@@ -73,7 +83,10 @@ please [file an issue] along with a detailed description.
 
 ## Credits
 
-This project was generated from [@cjolowicz]'s [Hypermodern Python Cookiecutter] template.
+This project was originally generated from [@cjolowicz]'s [Hypermodern Python Cookiecutter] template.
+Benjamin Crews is the creator and primary owner, with significant contributions from I. Maloney.
+Creation of this project would not be possible without the thorough documentation from Rockwell
+International (various authors).
 
 [@cjolowicz]: https://github.com/cjolowicz
 [pypi]: https://pypi.org/
