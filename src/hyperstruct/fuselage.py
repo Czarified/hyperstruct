@@ -1156,13 +1156,25 @@ class Fuselage:
 
     For multistation analysis: The external shell sectional geometry is represented as
     a family of shapes (rounded rectangles). External geometry is described at the nose,
-    tail, and 8 intermediate stations. Shell structure is evaluate at a maximum of 19
+    tail, and 8 intermediate stations. Shell structure is evaluated at a maximum of 19
     synthesis cuts, for which geometry is determined by interpolation between the
     described stations.
     """
 
-    nose: Station
-    """Geometry definition at the Nose Station."""
+    stations: Tuple[Station]
+    """A set of stations to define the geometry."""
 
-    tail: Station
-    """Geometry definition at the Tail Station."""
+    def synthesis_cut(self, start: Station, end: Station) -> None:
+        """Interpolate the geometry between the described stations.
+
+        When marching along the Fuselage Station direction and evaluating
+        weights sizing, it's necessary to interpolate between the defined geometries.
+
+        Args:
+            start: the Station ahead of the cut
+            end: the Station after the cut.
+
+        Returns:
+            None
+        """
+        return None
