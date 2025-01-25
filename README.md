@@ -36,7 +36,7 @@ estimates, with flexiblity to a plethora of design variables. All of this
 is predominantly derived from fundamental structural methods, or historically
 predicated empirical formulas.
 
-## Cuurrent Status
+## Current Status
 
 - 😬 Not much! This project requires a lot of boilerplate before any meaningful results or demos.
 - A major goal for 2025 is a functional demo of at least the Fuselage methods! Stay tuned!
