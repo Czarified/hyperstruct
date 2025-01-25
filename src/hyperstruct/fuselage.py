@@ -1164,7 +1164,7 @@ class Fuselage:
     stations: Tuple[Station]
     """A set of stations to define the geometry."""
 
-    def cut_geometry(self, start: Station, end: Station) -> None:
+    def cut_geometry(self, start: Station, end: Station) -> Station:
         """Interpolate the geometry between the described stations.
 
         When marching along the Fuselage Station direction and evaluating
@@ -1177,7 +1177,8 @@ class Fuselage:
         Returns:
             None
         """
-        return Station
+        _ = end
+        return start
 
     def synthesis(self) -> None:
         """The full multistations synthesis loop.
@@ -1220,5 +1221,5 @@ class Fuselage:
                 geom = self.cut_geometry(v, self.stations[k + 1])
 
         # This is nonsense stuff to pass pre-commit.
-        _ = geom + 1
+        _ = geom
         #
