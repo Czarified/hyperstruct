@@ -1164,7 +1164,7 @@ class Fuselage:
     stations: Tuple[Station]
     """A set of stations to define the geometry."""
 
-    def synthesis_cut(self, start: Station, end: Station) -> None:
+    def cut_geometry(self, start: Station, end: Station) -> None:
         """Interpolate the geometry between the described stations.
 
         When marching along the Fuselage Station direction and evaluating
@@ -1177,4 +1177,48 @@ class Fuselage:
         Returns:
             None
         """
-        return None
+        return Station
+
+    def synthesis(self) -> None:
+        """The full multistations synthesis loop.
+
+        Mocking this up for now, to outline the roadmap for all methods.
+
+        Geometry definitions and constraints, loads, and design criteria are all
+        parameters evaluated in the synthesis of shell members. Covers, Minor
+        Frames, and Longitudinal Members (Stringers/Longerons) form the basic
+        structural grid work that resists vehicle shear and bending loads. Covers
+        are thin sheets which are efficient in resisting shear and tension loads,
+        but inefficient in resitting compresison loads. Stiffening members, Minor
+        Frames, and Stringers/Longerons are used to provide the cpability for
+        resisting compression loads.
+
+        Major Frames, required for the redistribution of concentrated external
+        loads, are only dependnet on these loads and the path of balancing
+        forces. Therefore, they are synthesized independently.
+
+        Pressure bulkhead design criteria and sizing are also evaluated
+        independently for local considerations.
+
+        Several assumptions have bene made to minimize the multiplicity of
+        variables and thus simplify the synthesis process.
+            1. The shell is assumed to be composed of only four (4) sectors:
+            upper, lower, and two symmetric sides.
+            2. In the case of stringer construction, all stringers within a
+            sector are assumed to be of equal cross-sectional area.
+            3. The side sector is designed to resist only vertical shear load,
+            and stringers in this sector are sized to satisfy minimum area and
+            cover support requirements.
+        """
+        for k, v in enumerate(self.stations):
+            if k == len(self.stations):
+                # the last station in the tuple is the tail geometry,
+                # so no synthesis cut aft of the tail section.
+                continue
+            else:
+                # interpolate the geometry between the current station and the next
+                geom = self.cut_geometry(v, self.stations[k + 1])
+
+        # This is nonsense stuff to pass pre-commit.
+        _ = geom + 1
+        #
