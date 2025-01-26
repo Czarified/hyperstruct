@@ -1129,6 +1129,30 @@ class Bulkhead(Component):
 
 
 @dataclass
+class MajorFrame(Component):
+    """Major Frame structural component.
+
+    Major Frames are sized to redestribute loads from external components supported by
+    the fuselage. These external components are:
+        1. Nose gear (Trunnion Frame, and Drag Strut Frame)
+        2. Main Gear (Trunnion Frame, Drag Strut Frame)
+        3. Wing (Front Spar, Intermediate Spar, and Rear Spar frames)
+        4. Horizontal Tail (Front and Rear Spar frames)
+        5. Vertical Tail (Frong and Rear Spar frames)
+        6. Nacelle (Forward and Aft support frames)
+        7. Other external components (Forward and Aft support frames)
+
+    All/Any of these may be discrete frames, may not exist at all for a specific configuration,
+    or may be common frames. Common frames, those which occur at the same fuselage stations,
+    are designed for th combined loads from as many as three (3) sources (e.g. a frame which
+    is used for reacting the wing rear spar, main landing gear trunnion, and forward nacelle).
+    """
+
+    fs_loc: float
+    """Fuselage Station location (e.g. 150in from origin)."""
+
+
+@dataclass
 class Fuselage:
     """A Fuselage assembly.
 
@@ -1163,6 +1187,9 @@ class Fuselage:
 
     stations: Tuple[Station]
     """A set of stations to define the geometry."""
+
+    major_frames: Tuple[MajorFrame]
+    """A set of MajorFrames with load introduction points."""
 
     def cut_geometry(self, start: Station, end: Station) -> Station:
         """Interpolate the geometry between the described stations.
