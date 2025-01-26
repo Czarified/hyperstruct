@@ -225,3 +225,17 @@ class Station:
         arc_length = a * (ellipeinc(theta_end, m) - ellipeinc(theta_start, m))
 
         return float(arc_length)
+
+    def curvature(self) -> float:
+        """Calculates the nominal readius of curvature.
+
+        Returns:
+            float of the radius of curvature
+
+        Raises:
+            NotImplementedError: until developed
+        """
+        if True is False:
+            return 0.0
+        else:
+            raise NotImplementedError

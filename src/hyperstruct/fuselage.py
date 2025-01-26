@@ -1129,6 +1129,30 @@ class Bulkhead(Component):
 
 
 @dataclass
+class MajorFrame(Component):
+    """Major Frame structural component.
+
+    Major Frames are sized to redestribute loads from external components supported by
+    the fuselage. These external components are:
+        1. Nose gear (Trunnion Frame, and Drag Strut Frame)
+        2. Main Gear (Trunnion Frame, Drag Strut Frame)
+        3. Wing (Front Spar, Intermediate Spar, and Rear Spar frames)
+        4. Horizontal Tail (Front and Rear Spar frames)
+        5. Vertical Tail (Frong and Rear Spar frames)
+        6. Nacelle (Forward and Aft support frames)
+        7. Other external components (Forward and Aft support frames)
+
+    All/Any of these may be discrete frames, may not exist at all for a specific configuration,
+    or may be common frames. Common frames, those which occur at the same fuselage stations,
+    are designed for th combined loads from as many as three (3) sources (e.g. a frame which
+    is used for reacting the wing rear spar, main landing gear trunnion, and forward nacelle).
+    """
+
+    fs_loc: float
+    """Fuselage Station location (e.g. 150in from origin)."""
+
+
+@dataclass
 class Fuselage:
     """A Fuselage assembly.
 
@@ -1156,13 +1180,73 @@ class Fuselage:
 
     For multistation analysis: The external shell sectional geometry is represented as
     a family of shapes (rounded rectangles). External geometry is described at the nose,
-    tail, and 8 intermediate stations. Shell structure is evaluate at a maximum of 19
+    tail, and 8 intermediate stations. Shell structure is evaluated at a maximum of 19
     synthesis cuts, for which geometry is determined by interpolation between the
     described stations.
     """
 
-    nose: Station
-    """Geometry definition at the Nose Station."""
+    stations: Tuple[Station]
+    """A set of stations to define the geometry."""
 
-    tail: Station
-    """Geometry definition at the Tail Station."""
+    major_frames: Tuple[MajorFrame]
+    """A set of MajorFrames with load introduction points."""
+
+    def cut_geometry(self, start: Station, end: Station) -> Station:
+        """Interpolate the geometry between the described stations.
+
+        When marching along the Fuselage Station direction and evaluating
+        weights sizing, it's necessary to interpolate between the defined geometries.
+
+        Args:
+            start: the Station ahead of the cut
+            end: the Station after the cut.
+
+        Returns:
+            None
+        """
+        _ = end
+        return start
+
+    def synthesis(self) -> None:
+        """The full multistations synthesis loop.
+
+        Mocking this up for now, to outline the roadmap for all methods.
+
+        Geometry definitions and constraints, loads, and design criteria are all
+        parameters evaluated in the synthesis of shell members. Covers, Minor
+        Frames, and Longitudinal Members (Stringers/Longerons) form the basic
+        structural grid work that resists vehicle shear and bending loads. Covers
+        are thin sheets which are efficient in resisting shear and tension loads,
+        but inefficient in resitting compresison loads. Stiffening members, Minor
+        Frames, and Stringers/Longerons are used to provide the cpability for
+        resisting compression loads.
+
+        Major Frames, required for the redistribution of concentrated external
+        loads, are only dependnet on these loads and the path of balancing
+        forces. Therefore, they are synthesized independently.
+
+        Pressure bulkhead design criteria and sizing are also evaluated
+        independently for local considerations.
+
+        Several assumptions have bene made to minimize the multiplicity of
+        variables and thus simplify the synthesis process.
+            1. The shell is assumed to be composed of only four (4) sectors:
+            upper, lower, and two symmetric sides.
+            2. In the case of stringer construction, all stringers within a
+            sector are assumed to be of equal cross-sectional area.
+            3. The side sector is designed to resist only vertical shear load,
+            and stringers in this sector are sized to satisfy minimum area and
+            cover support requirements.
+        """
+        for k, v in enumerate(self.stations):
+            if k == len(self.stations):
+                # the last station in the tuple is the tail geometry,
+                # so no synthesis cut aft of the tail section.
+                continue
+            else:
+                # interpolate the geometry between the current station and the next
+                geom = self.cut_geometry(v, self.stations[k + 1])
+
+        # This is nonsense stuff to pass pre-commit.
+        _ = geom
+        #
