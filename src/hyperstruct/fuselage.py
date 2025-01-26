@@ -17,6 +17,299 @@ from hyperstruct import Station
 
 
 @dataclass
+class ForcedCrippling(Component):
+    """This is a dedicated analysis class for Forced Crippling.
+
+    If the covers on the fuselage structure are allowed to buckle under shear loads,
+    in the buckled state these loads are supported by diagonal tension stresses.
+    Axial loads produced by cover tension field are reacted by stiffening elements
+    (minor frames, stringers) that bound the panel. Since shear loads are maximum at
+    the midpoint of the side panel, this condition is evaluated for elements on the
+    side sectors of the shell.
+
+    Basic formulations for the prevention of forced crippling failure due to the
+    postbuckled design are taken directly from Kuhn[4] and Bruhn [1]. These methods
+    have been modified to account for the condition where different materials are
+    selected for cover, longeron, and minor frame design.
+
+    Cover sizing is established to satisfy strength and other criteria within the Cover
+    class. Shear stress based on this thickness is compared against the critical shear stress
+    to determine whether the panel is critical for postbuckled strength. At this point
+    in the sizing process, longeron (stringer) area has not been established. The
+    longitudinal member area is required to define panel boundary support constraints.
+    A first approximation is made for longeron area base on vehicle bending loads.
+    """
+
+    def ring_allowable_stress(
+        self,
+        RC: float,
+        K: float,
+        t_r: float,
+        t_c: float,
+        frame_e: float,
+        cover_e: float,
+    ) -> Tuple[float, float]:
+        """Allowable ring stress for the Forced Crippling method.
+
+        Args:
+            RC: Radius of curvature
+            K: Diagonal tension factor
+            t_r: Frame flange thickness
+            t_c: Cover thickness
+            frame_e: Frame Young's Modulus
+            cover_e: Cover Young's Modulus
+
+        Returns:
+            A tuple of (F_RG, G), Frame allowable stress,
+            and emiprical factor from Bruhn.
+        """
+        # Allowable ring frame stress
+        if RC <= 151.586:
+            N = (
+                (18695 + 75.238 * RC)
+                * K ** (2 / 3)
+                * (t_r / t_c) ** (1 / 3)
+                * (frame_e / cover_e) ** (1 / 9)
+            )
+        elif RC > 151.586:
+            N = (
+                30100
+                * K ** (2 / 3)
+                * (t_r / t_c) ** (1 / 3)
+                * (frame_e / cover_e) ** (1 / 9)
+            )
+
+        G = self.material.F_cy * 1088 - 5 / (
+            5.88 * (self.material.F_cy / frame_e + 0.002) ** 0.5
+        )
+
+        F_RG = N * G
+
+        return (F_RG, G)
+
+    def diagonal_factor(
+        self, D: float, L: float, t_c: float, RC: float, f_s: float, f_scr: float
+    ) -> float:
+        """Calculate the diagonal tension factor.
+
+        There's two rules here. The dimension ratios are capped at 2, and
+        we need to use the larger ratio depending on the convention of construction.
+        Typically, for Stringer systems D > L, but for Longerons L > D.
+
+        Args:
+            D: Fuselage Diameter
+            L: Frame Spacing
+            t_c: Cover thickness
+            RC: Side panel radius of curvature
+            f_s: Shear stress in Cover at cut
+            f_scr: Critical shear buckling strength of Cover
+
+        Returns:
+            Diagonal Tension factor, K, from empirical relations.
+
+        Raises:
+            ValueError: An error occurred comparing values of D and L.
+        """
+        if D >= L:
+            if D / L > 2:
+                k = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
+            else:
+                k = np.tanh((0.5 + 300 * (t_c / RC * D / L)) * np.log10(f_s / f_scr))
+        elif L > D:
+            if L / D > 2:
+                k = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
+            else:
+                k = np.tanh((0.5 + 300 * (t_c / RC * L / D)) * np.log10(f_s / f_scr))
+        else:
+            raise ValueError(
+                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
+            )
+
+        return float(k)
+
+    def forced_crippling(
+        self,
+        L: float,
+        D: float,
+        M: float,
+        Z: float,
+        sum_z_sq: float,
+        t_c: float,
+        RC: float,
+        f_s: float,
+        f_scr: float,
+        cover_e: float | None = None,
+        long_e: float | None = None,
+    ) -> float:
+        """Thickness from forced crippling.
+
+        If the covers on the fuselage structure are allowed to buckle under shear loads,
+        in the buckled state these loads are supported by diagonal tension stresses.
+        Axial loads produced by cover tension field are reacted by stiffening elements
+        (minor frames, stringers) that bound the panel. Since shear loads are maximum at
+        the midpoint of the side panel, this condition is evaluated for elements on the
+        side sectors of the shell.
+
+        Basic formulations for the prevention of forced crippling failure due to the
+        postbuckled design are taken directly from Kuhn[4] and Bruhn [1]. These methods
+        have been modified to account for the condition where different materials are
+        selected for cover, longeron, and minor frame design.
+
+        Cover sizing is established to satisfy strength and other criteria within the Cover
+        class. Shear stress based on this thickness is compared against the critical shear stress
+        to determine whether the panel is critical for postbuckled strength. At this point
+        in the sizing process, longeron (stringer) area has not been established. The
+        longitudinal member area is required to define panel boundary support constraints.
+        A first approximation is made for longeron area base on vehicle bending loads.
+
+        Cover sizing is established to satisfy strength and other criteria within the Cover
+        class. Shear stress based on this thickness is compared against the critical shear stress
+        to determine whether the panel is critical for postbuckled strength. At this point
+        in the sizing process, longeron (stringer) area has not been established. The
+        longitudinal member area is required to define panel boundary support constraints.
+        A first approximation is made for longeron area base on vehicle bending loads.
+
+        Args:
+            L: Frame Spacing
+            D: Fuselage Diameter
+            M: Bending moment at the cut
+            Z: coordinate of the extreme fiber (fuselage half-depth at cut)
+            sum_z_sq: sum of longeron coordinates squared
+            t_c: Cover thickness
+            RC: Side panel radius of curvature
+            f_s: Shear stress in Cover at cut
+            f_scr: Critical shear buckling strength of Cover
+            cover_e: Cover Young's Modulus
+            long_e: Longeron Young's Modulus
+
+        Returns:
+            A bunch of floats?
+
+        Raises:
+            AttributeError: The construction attribute is not properly defined.
+            ValueError: D and L cannot be successfully compared.
+        """
+        # Longeron/Stringer area
+        A_s = M * Z / (self.material.F_cy * sum_z_sq)
+
+        K = self.diagonal_factor(D, L, t_c, RC, f_s, f_scr)
+
+        # Angle of the folds is given an initial approximation.
+        # This is probably good enough for weights sizing, but a more exact solution involves iteration.
+        # This is the radians equivalent of 45 degrees.
+        alpha = np.pi / 4  # [rad]
+
+        # The forced crippling method is highly dependant on empirical relations.
+        # As such, the specific relations we use are dependant on the construction method.
+        # This method must be chosen from the user, but they can use it as a conceptual
+        # sizing variable permutation if they wish.
+        if not cover_e:
+            cover_e = self.material.E_c
+
+        if not long_e:
+            long_e = self.material.E_c
+
+        frame_e = self.material.E_c
+
+        # Use the same K value as before.
+        alpha_ratio = K**0.25
+
+        # A is the curve fit ordinate, Fig. 24 of ADA002867
+        A = (D / RC * np.sqrt(cover_e / f_s)) / np.sqrt(
+            1
+            + 0.5
+            * (D * t_c * cover_e / (A_s * long_e) + L * cover_e / (self.area * frame_e))
+        )
+
+        alpha_pdt = (np.pi / 4 + 0.1443 * A) / (1 + 0.175622 * A + 0.013411 * A**2)
+        alpha = alpha_pdt * alpha_ratio
+
+        # Secondary ring load: axial load in ring due to shear stress
+        P_rg = f_s * K * t_c * L * np.tan(alpha)
+
+        # Effective ring area
+        A_erg = self.area / (1 + (self.c / (2 * self.rho)) ** 2)
+
+        if self.construction == "stringer":
+            ####
+            # STRINGER CONSTRUCTION
+            ####
+
+            # Secondary stringer load: axial load in stringer due to shear stress
+            # P_st = f_s * K * np.tan(alpha) ** (-1)
+
+            # Effecting ring and cover area
+            A_edt = A_erg + 0.5 * L * t_c * (1 - K) * (cover_e / frame_e)
+
+            # Stress in the ring frame
+            f_rg = P_rg / A_edt
+            # Secondary stringer stress: axial load due to shear stress
+            # f_st = P_st / A_edt
+
+        elif self.construction == "longeron":
+            ####
+            # LONGERON CONSTRUCTION
+            ####
+
+            # Secondary stringer load: axial load in stringer due to shear stress
+            # P_st = f_s * K * t_c * D / 2 * np.tan(alpha) ** (-1)
+
+            A_est = A_s / (1 + (self.c / (2 * self.rho)) ** 2)
+
+            # Effecting ring and cover area
+            A_edt = A_est + 0.5 * D * t_c * (1 - K) * (cover_e / frame_e)
+
+            # Stress in the ring frame
+            f_rg = P_rg / A_edt
+            # Secondary longeron stress: axial load in longeron due to shear stress
+            # f_st = P_st / A_edt
+
+        else:
+            raise AttributeError(
+                "The MinorFrame attribute 'construction' is not properly defined. Acceptable options are 'stringer' or 'longeron'"
+            )
+
+        # Max stress in the frame is based on an empirical relation from Bruhn.
+        # This is dependent on the ratio of frame/longeron spacing.
+        # This relation applies for both the applied stress, f, and the allowable stress, F.
+        if L / D <= 1.2:
+            frgmax_frg = 1 + 0.78 * (1 - K) - 0.65 * L / D * (1 - K)
+        elif L / D > 1.2:
+            frgmax_frg = 1.0
+        else:
+            raise ValueError(
+                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
+            )
+
+        frgmax = frgmax_frg * f_rg
+
+        F_RG, G = self.ring_allowable_stress(RC, K, t_c, frame_e, cover_e)
+        H = A * G
+
+        # Iterating for cap flange thickness, t_r
+        x_c = 0.5 * (1 - K) * cover_e / self.material.E_c
+        x_b = (4 * self.b + self.c / 2) / (
+            (1 + (self.c / (2 * self.rho)) ** 2) * L * t_c
+        )
+        x_a = ((f_s * np.tan(alpha) / H) * (frgmax / F_RG)) ** 3 * t_c * K
+
+        # An initialization for optimizing
+        err = 100
+        while err > 0.1:
+            t_r2 = self.t_r - (
+                (self.t_r * (self.t_r * x_b + x_c) ** 3 + x_a)
+                / (
+                    3 * x_b * self.t_r * (self.t_r * x_b + x_c) ** 2
+                    + (self.t_r * x_b + x_c) ** 3
+                )
+            )
+            err = t_r2 - self.t_r
+            self.t_r = t_r2
+
+        return float(t_r2)
+
+
+@dataclass
 class Cover(Component):
     """Fuselage Cover component.
 
