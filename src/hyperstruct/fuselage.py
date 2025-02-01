@@ -40,6 +40,54 @@ class ForcedCrippling(Component):
     A first approximation is made for longeron area base on vehicle bending loads.
     """
 
+    c: float
+    """frame depth."""
+
+    b: float
+    """cap flange width."""
+
+    construction: str
+    """Construction method. ('stringer' or 'longeron')"""
+
+    t_r: float = 0.0
+    """cap flange thickness."""
+
+    @property
+    def t_w(self) -> float:
+        """Web thickness."""
+        return self.t_r / 2
+
+    @property
+    def area(self) -> float:
+        """Cross-sectional area."""
+        return 4 * self.b * self.t_r + self.c * self.t_w
+
+    @property
+    def i_xx(self) -> float:
+        """Second moment of area (bending moment of inertia).
+
+        Assumes the simplified case that t_r = 2*t_w.
+        """
+        return self.t_r * (
+            self.b * self.c**2 + 2 * self.b**3 / 3 - self.b**2 * self.c + self.c**3 / 24
+        )
+
+    @property
+    def rho(self) -> float:
+        """Radius of gyration."""
+        return float(
+            (
+                (
+                    self.b * self.c**2
+                    + 2 * self.b**3 / 3
+                    - self.b**2 * self.c
+                    + self.c**3 / 24
+                )
+                / (4 * self.b + self.c / 2)
+            )
+            ** 0.5
+        )
+
     def ring_allowable_stress(
         self,
         RC: float,
@@ -140,6 +188,7 @@ class ForcedCrippling(Component):
         f_scr: float,
         cover_e: float | None = None,
         long_e: float | None = None,
+        frame_e: float | None = None,
     ) -> float:
         """Thickness from forced crippling.
 
@@ -181,6 +230,7 @@ class ForcedCrippling(Component):
             f_scr: Critical shear buckling strength of Cover
             cover_e: Cover Young's Modulus
             long_e: Longeron Young's Modulus
+            frame_e: Frame Young's Modulus
 
         Returns:
             A bunch of floats?
@@ -189,7 +239,7 @@ class ForcedCrippling(Component):
             AttributeError: The construction attribute is not properly defined.
             ValueError: D and L cannot be successfully compared.
         """
-        # Longeron/Stringer area
+        # First approximation for Longeron/Stringer area
         A_s = M * Z / (self.material.F_cy * sum_z_sq)
 
         K = self.diagonal_factor(D, L, t_c, RC, f_s, f_scr)
@@ -209,7 +259,8 @@ class ForcedCrippling(Component):
         if not long_e:
             long_e = self.material.E_c
 
-        frame_e = self.material.E_c
+        if not frame_e:
+            frame_e = self.material.E_c
 
         # Use the same K value as before.
         alpha_ratio = K**0.25
@@ -236,15 +287,16 @@ class ForcedCrippling(Component):
             ####
 
             # Secondary stringer load: axial load in stringer due to shear stress
-            # P_st = f_s * K * np.tan(alpha) ** (-1)
+            P_st = f_s * K * np.tan(alpha) ** (-1)
 
-            # Effecting ring and cover area
+            # Effecting ring and cover area, and effective stringer area
             A_edt = A_erg + 0.5 * L * t_c * (1 - K) * (cover_e / frame_e)
+            A_est = A_s / (1 + (self.c / self.rho) ** 2)
 
             # Stress in the ring frame
             f_rg = P_rg / A_edt
             # Secondary stringer stress: axial load due to shear stress
-            # f_st = P_st / A_edt
+            f_st = P_st / (A_est / (D * t_c) + 0.5 * (1 - K) * (cover_e / frame_e))
 
         elif self.construction == "longeron":
             ####
@@ -252,7 +304,7 @@ class ForcedCrippling(Component):
             ####
 
             # Secondary stringer load: axial load in stringer due to shear stress
-            # P_st = f_s * K * t_c * D / 2 * np.tan(alpha) ** (-1)
+            P_st = f_s * K * t_c * D / 2 * np.tan(alpha) ** (-1)
 
             A_est = A_s / (1 + (self.c / (2 * self.rho)) ** 2)
 
@@ -262,7 +314,7 @@ class ForcedCrippling(Component):
             # Stress in the ring frame
             f_rg = P_rg / A_edt
             # Secondary longeron stress: axial load in longeron due to shear stress
-            # f_st = P_st / A_edt
+            f_st = P_st / A_edt
 
         else:
             raise AttributeError(
@@ -306,7 +358,7 @@ class ForcedCrippling(Component):
             err = t_r2 - self.t_r
             self.t_r = t_r2
 
-        return float(t_r2)
+        return (float(t_r2), f_st)
 
 
 @dataclass

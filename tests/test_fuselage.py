@@ -5,6 +5,7 @@ import pytest
 from hyperstruct import Material
 from hyperstruct.fuselage import Bulkhead
 from hyperstruct.fuselage import Cover
+from hyperstruct.fuselage import ForcedCrippling
 
 
 @pytest.fixture
@@ -55,6 +56,15 @@ def bulkhead(aluminum: Material) -> Bulkhead:
     return component
 
 
+@pytest.fixture
+def diag_ten(aluminum: Material) -> ForcedCrippling:
+    """Build a ForcedCrippling class."""
+    component = ForcedCrippling(
+        material=aluminum, c=4.0, b=2.0, construction="stringer", t_r=0.050
+    )
+    return component
+
+
 def test_unmilled_shear_and_net(unmilled_cover: Cover) -> None:
     """Test an unmilled cover."""
     t_c = unmilled_cover.field_thickness_block_shear()
@@ -90,3 +100,8 @@ def test_bulkhead_stiffener_spacing(bulkhead: Bulkhead) -> None:
     t_s, d, H = bulkhead.stiffener_spacing()
     assert t_s >= 0.025
     assert t_s < 0.500
+
+
+def test_diagonal_tension(diag_ten: diag_ten) -> None:
+    """Initializes a ForcedCrippling class."""
+    assert diag_ten.c >= 4.0
