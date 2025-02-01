@@ -190,7 +190,7 @@ class ForcedCrippling(Component):
         long_e: float | None = None,
         frame_e: float | None = None,
     ) -> Tuple[float, Any]:
-        """Thickness from forced crippling.
+        """Forced Crippling Analysis.
 
         If the covers on the fuselage structure are allowed to buckle under shear loads,
         in the buckled state these loads are supported by diagonal tension stresses.
