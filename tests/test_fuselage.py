@@ -102,6 +102,6 @@ def test_bulkhead_stiffener_spacing(bulkhead: Bulkhead) -> None:
     assert t_s < 0.500
 
 
-def test_diagonal_tension(diag_ten: diag_ten) -> None:
+def test_diagonal_tension(diag_ten: ForcedCrippling) -> None:
     """Initializes a ForcedCrippling class."""
     assert diag_ten.c >= 4.0

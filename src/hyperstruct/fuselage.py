@@ -189,7 +189,7 @@ class ForcedCrippling(Component):
         cover_e: float | None = None,
         long_e: float | None = None,
         frame_e: float | None = None,
-    ) -> float:
+    ) -> Tuple[float, Any]:
         """Thickness from forced crippling.
 
         If the covers on the fuselage structure are allowed to buckle under shear loads,
@@ -335,7 +335,7 @@ class ForcedCrippling(Component):
 
         frgmax = frgmax_frg * f_rg
 
-        F_RG, G = self.ring_allowable_stress(RC, K, t_c, frame_e, cover_e)
+        F_RG, G = self.ring_allowable_stress(RC, K, self.t_r, t_c, frame_e, cover_e)
         H = A * G
 
         # Iterating for cap flange thickness, t_r
