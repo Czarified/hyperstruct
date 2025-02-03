@@ -26,6 +26,8 @@ al_24st = Material(
     db_r=116,
 )
 
+# This should really be re-factored. Geometry and overall
+# inputs should be given at class isntantiation, not in the method call.
 example_34 = ForcedCrippling(
     material=al_24st, c=3.0, b=1.0, construction="stringer", t_r=0.040
 )
