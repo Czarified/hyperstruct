@@ -14,6 +14,7 @@ hidden:
 maxdepth: 1
 ---
 
+introduction
 theory
 usage
 api
