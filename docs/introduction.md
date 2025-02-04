@@ -26,17 +26,17 @@ which gives very simple formulas based on linear regression of historical aircra
 wetted areas of geometry, and an idea of the aircraft's mission role. For a fighter aircraft this could work
 out as follows:
 
-$$
-W_{wing} = 9.0 * S_{exposed planform} = 9.0 * 280.0 = 2520.0 [lbs]
-W_{horz} = 4.0 * S_{exposed planform} = 4.0 * (2*32.2) = 257.6 [lbs]
-W_{vert} = 4.3 * S_{exposed planform} = 4.3 * 31.85 = 137.0 [lbs]
-W_{fuse} = 4.8 * S_{wetted area} = 4.8 * 128.7 = 617.8 [lbs]
-W_{gear} = 0.033 * TOGW = 0.033 * 37500 = 1237.5 [lbs]
-W_{inst.eng} = 1.3 * W_eng = 1.3 * 4100.0 = 5330.0 [lbs]
-W_{misc} = 0.17 * TOGW = 0.17 * 37500 = 6375.0 [lbs]
-
+```{math}
+W_{wing} = 9.0 * S_{exposed planform} = 9.0 * 280.0 = 2520.0 [lbs]     \\
+W_{horz} = 4.0 * S_{exposed planform} = 4.0 * (2*32.2) = 257.6 [lbs]   \\
+W_{vert} = 4.3 * S_{exposed planform} = 4.3 * 31.85 = 137.0 [lbs]      \\
+W_{fuse} = 4.8 * S_{wetted area} = 4.8 * 128.7 = 617.8 [lbs]           \\
+W_{gear} = 0.033 * TOGW = 0.033 * 37500 = 1237.5 [lbs]                 \\
+W_{inst.eng} = 1.3 * W_eng = 1.3 * 4100.0 = 5330.0 [lbs]               \\
+W_{misc} = 0.17 * TOGW = 0.17 * 37500 = 6375.0 [lbs]                   \\
+\\
 OEW = 16,475 [lbs]
-$$
+```
 
 So that's a bit of math, but in the end we end up with an answer _kinda_ close to the empty weight of an F-16
 Block 50 (18,900 lbs). Clearly it's off, but it's also incredibly simple and straight-forward. This is great
@@ -69,16 +69,16 @@ that's not always correct and not always available.
 
 And this scene is where SWEEP comes in.
 
-> ... the risk is high of adoptin a less than optimum basic configuration at the very inception of
-> a program,adversely affecting system effectiveness throughout the life of the design.
+> ... the risk is high of adopting a less than optimum basic configuration at the very inception of
+> a program, adversely affecting system effectiveness throughout the life of the design.
 
 SWEEP's documentation is extensive. I haven't even read through it all. The executive summary, however, is
 the most useful at, well... _summarizing_ what it does and why {cite}`vol1_2850`. In general, structural
 weight is a **huge** driving function of total vehicle weight, and therefore effectivity. To use existing
-methods, you _need_ derived statistical parameter, relevant to your mission and flight profiles. What if
+methods, you _need_ derived statistical parameters, relevant to your mission and flight profiles. What if
 you start pushing the limits beyond the data collected? Fly higher, fly faster, pull harder g's, or even
 fly into the realm where thermomechanical effects begin to drive the structural sizing. You need an analytical
-solution instead of statistical, or perhaps you could iteratively build planes on the fringe of your dataset
+solution instead of statistical; or perhaps you could iteratively build planes on the fringe of your dataset
 and proceed to collect more data each time.
 
 Additionally, in modern times AI/ML and Large Language Models are
@@ -98,7 +98,7 @@ pieces off that mountain and build into some functional structure...
 
 I selected python as the language for this project, because I'm fluent and love it. If python's execution
 speed becomes an issue, such that languages like C# or Julia need to be considered, this project is already
-a huge success. Until that time, python should be fast enough and have enough features to executed what I need.
+a huge success. Until that time, python should be fast enough and have enough features to execute what I need.
 
 SWEEP is documented and archived by the Defence Technical Information Center.
 Search for the relevant technical number, or maybe the links below will help...
