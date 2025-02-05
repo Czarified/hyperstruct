@@ -5,7 +5,7 @@ and potentially share his thoughts about all this.
 
 An immediate question, if you're not the sort to get excited about python code that automates structural analysis,
 is "Why are you doing this...?" And the answer is pretty simple: I'm a huge aircraft nerd, and this is a passion
-project of mine. I love advanced analytical concepts, dusting off old tombs of papers and documentation, and
+project of mine. I love advanced analytical concepts, dusting off old tomes of papers and documentation, and
 making tools that can help people with advanced engineering topics. Additionally, I truly believe that the
 aerospace industry would be better off if there were more open-source libraries and utilities tailored to our
 unique requirements, written by experts, and hopefully validated against existing data or scientific research.
@@ -21,7 +21,7 @@ practices. They often fail to answer questions about _how_ design changes affect
 
 ## Basic Weight Approximations
 
-As and example, consider the basic equations from Raymer. Raymer offers an Approximate Group Weights method,
+As an example, consider the basic equations from Raymer. Raymer offers an Approximate Group Weights method,
 which gives very simple formulas based on linear regression of historical aircraft data. All we need is the
 wetted areas of geometry, and an idea of the aircraft's mission role. For a fighter aircraft this could work
 out as follows:
@@ -49,11 +49,12 @@ much less useful, much earlier in the design process. As an example, take the F-
 design study was conducted in 1982 on the weight impacts of (at the time) advanced composite materials
 {cite}`buther_non-honeycomb_1982`. This study shows that a non-honeycomb metallic stabilizer weighed
 approximately 167 lbs (compare that to half our previous estimate for a single stabilizer), but with advanced
-materials it could be reduced to 158 lbs!
+materials it could be reduced to 158 lbs! That's 18 total lbs saved on the vehicle, which really matters
+for an aircraft with the mission role of outmaneuvering every other combatant in aerial combat!
 
 To my knowledge, most weight approximation methods follow a similar procedure, trading off increasing
 mathematical and statistical complexity for increasingly accurate estimates. Statistical methods have factors
-for things like advanced materials, or configuration changes. This is one of the duty of the Weights Engineer
+for things like advanced materials, or configuration changes. This is one of the duties of the Weights Engineer
 during the Design Process.
 
 ## Digging Deeper
@@ -78,7 +79,7 @@ weight is a **huge** driving function of total vehicle weight, and therefore eff
 methods, you _need_ derived statistical parameters, relevant to your mission and flight profiles. What if
 you start pushing the limits beyond the data collected? Fly higher, fly faster, pull harder g's, or even
 fly into the realm where thermomechanical effects begin to drive the structural sizing. You need an analytical
-solution instead of statistical; or perhaps you could iteratively build planes on the fringe of your dataset
+solution instead of statistical one; or perhaps you could iteratively build planes on the fringe of your dataset
 and proceed to collect more data each time.
 
 Additionally, in modern times AI/ML and Large Language Models are
