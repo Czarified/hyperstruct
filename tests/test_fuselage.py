@@ -60,7 +60,15 @@ def bulkhead(aluminum: Material) -> Bulkhead:
 def diag_ten(aluminum: Material) -> ForcedCrippling:
     """Build a ForcedCrippling class."""
     component = ForcedCrippling(
-        material=aluminum, c=4.0, b=2.0, construction="stringer", t_r=0.050
+        d=15,
+        h=7.25,
+        c=3.0,
+        b=1.0,
+        construction="stringer",
+        frame_material=aluminum,
+        cover_material=aluminum,
+        long_material=aluminum,
+        t_r=0.040,
     )
     return component
 
@@ -104,4 +112,9 @@ def test_bulkhead_stiffener_spacing(bulkhead: Bulkhead) -> None:
 
 def test_diagonal_tension(diag_ten: ForcedCrippling) -> None:
     """Initializes a ForcedCrippling class."""
-    assert diag_ten.c >= 4.0
+    t_r, f_st, f_rg = diag_ten.forced_crippling(
+        D=65.8, M=1.475e6, Z=32.9, sum_z_sq=120, t_c=0.032, RC=30.0, f_s=6000, f_scr=815
+    )
+    assert t_r <= 0.032
+    assert f_st >= 15000
+    assert f_rg >= 6500

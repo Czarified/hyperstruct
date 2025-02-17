@@ -13,11 +13,12 @@ import numpy as np
 from scipy.optimize import minimize_scalar
 
 from hyperstruct import Component
+from hyperstruct import Material
 from hyperstruct import Station
 
 
 @dataclass
-class ForcedCrippling(Component):
+class ForcedCrippling:
     """This is a dedicated analysis class for Forced Crippling.
 
     If the covers on the fuselage structure are allowed to buckle under shear loads,
@@ -40,17 +41,32 @@ class ForcedCrippling(Component):
     A first approximation is made for longeron area base on vehicle bending loads.
     """
 
+    d: float
+    """frame spacing."""
+
+    h: float
+    """stringer (longeron) spacing."""
+
     c: float
     """frame depth."""
 
     b: float
-    """cap flange width."""
+    """frame cap flange width."""
 
     construction: str
     """Construction method. ('stringer' or 'longeron')"""
 
+    frame_material: Material
+    """Frame modulus of elasticity."""
+
+    cover_material: Material
+    """Cover modulus of elasticity."""
+
+    long_material: Material
+    """Stringer (longeron) modulus of elasticity."""
+
     t_r: float = 0.0
-    """cap flange thickness."""
+    """frame cap flange thickness."""
 
     @property
     def t_w(self) -> float:
@@ -89,13 +105,7 @@ class ForcedCrippling(Component):
         )
 
     def ring_allowable_stress(
-        self,
-        RC: float,
-        K: float,
-        t_r: float,
-        t_c: float,
-        frame_e: float,
-        cover_e: float,
+        self, RC: float, K: float, t_r: float, t_c: float
     ) -> Tuple[float, float]:
         """Allowable ring stress for the Forced Crippling method.
 
@@ -104,8 +114,6 @@ class ForcedCrippling(Component):
             K: Diagonal tension factor
             t_r: Frame flange thickness
             t_c: Cover thickness
-            frame_e: Frame Young's Modulus
-            cover_e: Cover Young's Modulus
 
         Returns:
             A tuple of (F_RG, G), Frame allowable stress,
@@ -117,18 +125,18 @@ class ForcedCrippling(Component):
                 (18695 + 75.238 * RC)
                 * K ** (2 / 3)
                 * (t_r / t_c) ** (1 / 3)
-                * (frame_e / cover_e) ** (1 / 9)
+                * (self.frame_material.E / self.cover_material.E) ** (1 / 9)
             )
         elif RC > 151.586:
             N = (
                 30100
                 * K ** (2 / 3)
                 * (t_r / t_c) ** (1 / 3)
-                * (frame_e / cover_e) ** (1 / 9)
+                * (self.frame_material.E / self.cover_material.E) ** (1 / 9)
             )
 
-        G = self.material.F_cy * 1088 - 5 / (
-            5.88 * (self.material.F_cy / frame_e + 0.002) ** 0.5
+        G = self.frame_material.F_cy * 1088 - 5 / (
+            5.88 * (self.frame_material.F_cy / self.frame_material.E + 0.002) ** 0.5
         )
 
         F_RG = N * G
@@ -136,7 +144,7 @@ class ForcedCrippling(Component):
         return (F_RG, G)
 
     def diagonal_factor(
-        self, D: float, L: float, t_c: float, RC: float, f_s: float, f_scr: float
+        self, D: float, t_c: float, RC: float, f_s: float, f_scr: float
     ) -> float:
         """Calculate the diagonal tension factor.
 
@@ -146,7 +154,6 @@ class ForcedCrippling(Component):
 
         Args:
             D: Fuselage Diameter
-            L: Frame Spacing
             t_c: Cover thickness
             RC: Side panel radius of curvature
             f_s: Shear stress in Cover at cut
@@ -158,6 +165,8 @@ class ForcedCrippling(Component):
         Raises:
             ValueError: An error occurred comparing values of D and L.
         """
+        # Frame spacing is referenced as L in SWEEP, but d in Bruhn.
+        L = self.d
         if D >= L:
             if D / L > 2:
                 k = np.tanh((0.5 + 300 * (t_c / RC * 2)) * np.log10(f_s / f_scr))
@@ -177,7 +186,6 @@ class ForcedCrippling(Component):
 
     def forced_crippling(
         self,
-        L: float,
         D: float,
         M: float,
         Z: float,
@@ -186,10 +194,7 @@ class ForcedCrippling(Component):
         RC: float,
         f_s: float,
         f_scr: float,
-        cover_e: float | None = None,
-        long_e: float | None = None,
-        frame_e: float | None = None,
-    ) -> Tuple[float, Any]:
+    ) -> Tuple[Any, Any, Any]:
         """Forced Crippling Analysis.
 
         If the covers on the fuselage structure are allowed to buckle under shear loads,
@@ -219,7 +224,6 @@ class ForcedCrippling(Component):
         A first approximation is made for longeron area base on vehicle bending loads.
 
         Args:
-            L: Frame Spacing
             D: Fuselage Diameter
             M: Bending moment at the cut
             Z: coordinate of the extreme fiber (fuselage half-depth at cut)
@@ -228,21 +232,22 @@ class ForcedCrippling(Component):
             RC: Side panel radius of curvature
             f_s: Shear stress in Cover at cut
             f_scr: Critical shear buckling strength of Cover
-            cover_e: Cover Young's Modulus
-            long_e: Longeron Young's Modulus
-            frame_e: Frame Young's Modulus
 
         Returns:
-            A bunch of floats?
+            t_r : iterated ring thickness for minimum weight
+            f_st: secondary stress in stringer/longeron
+            f_rg: secondary stress in ring frame
 
         Raises:
             AttributeError: The construction attribute is not properly defined.
             ValueError: D and L cannot be successfully compared.
         """
+        # Frame spacing is referenced as L in SWEEP, but d in Bruhn.
+        L = self.d
         # First approximation for Longeron/Stringer area
-        A_s = M * Z / (self.material.F_cy * sum_z_sq)
+        A_s = M * Z / (self.long_material.F_cy * sum_z_sq)
 
-        K = self.diagonal_factor(D, L, t_c, RC, f_s, f_scr)
+        K = self.diagonal_factor(D, t_c, RC, f_s, f_scr)
 
         # Angle of the folds is given an initial approximation.
         # This is probably good enough for weights sizing, but a more exact solution involves iteration.
@@ -253,23 +258,18 @@ class ForcedCrippling(Component):
         # As such, the specific relations we use are dependant on the construction method.
         # This method must be chosen from the user, but they can use it as a conceptual
         # sizing variable permutation if they wish.
-        if not cover_e:
-            cover_e = self.material.E_c
-
-        if not long_e:
-            long_e = self.material.E_c
-
-        if not frame_e:
-            frame_e = self.material.E_c
 
         # Use the same K value as before.
         alpha_ratio = K**0.25
 
         # A is the curve fit ordinate, Fig. 24 of ADA002867
-        A = (D / RC * np.sqrt(cover_e / f_s)) / np.sqrt(
+        A = (D / RC * np.sqrt(self.cover_material.E / f_s)) / np.sqrt(
             1
             + 0.5
-            * (D * t_c * cover_e / (A_s * long_e) + L * cover_e / (self.area * frame_e))
+            * (
+                D * t_c * self.cover_material.E / (A_s * self.long_material.E)
+                + L * self.cover_material.E / (self.area * self.frame_material.E)
+            )
         )
 
         alpha_pdt = (np.pi / 4 + 0.1443 * A) / (1 + 0.175622 * A + 0.013411 * A**2)
@@ -289,14 +289,19 @@ class ForcedCrippling(Component):
             # Secondary stringer load: axial load in stringer due to shear stress
             P_st = f_s * K * np.tan(alpha) ** (-1)
 
-            # Effecting ring and cover area, and effective stringer area
-            A_edt = A_erg + 0.5 * L * t_c * (1 - K) * (cover_e / frame_e)
+            # Effective ring and cover area, and effective stringer area
+            A_edt = A_erg + 0.5 * L * t_c * (1 - K) * (
+                self.cover_material.E / self.frame_material.E
+            )
             A_est = A_s / (1 + (self.c / self.rho) ** 2)
 
             # Stress in the ring frame
             f_rg = P_rg / A_edt
             # Secondary stringer stress: axial load due to shear stress
-            f_st = P_st / (A_est / (D * t_c) + 0.5 * (1 - K) * (cover_e / frame_e))
+            f_st = P_st / (
+                A_est / (D * t_c)
+                + 0.5 * (1 - K) * (self.cover_material.E / self.frame_material.E)
+            )
 
         elif self.construction == "longeron":
             ####
@@ -309,7 +314,9 @@ class ForcedCrippling(Component):
             A_est = A_s / (1 + (self.c / (2 * self.rho)) ** 2)
 
             # Effecting ring and cover area
-            A_edt = A_est + 0.5 * D * t_c * (1 - K) * (cover_e / frame_e)
+            A_edt = A_est + 0.5 * D * t_c * (1 - K) * (
+                self.cover_material.E / self.frame_material.E
+            )
 
             # Stress in the ring frame
             f_rg = P_rg / A_edt
@@ -335,11 +342,11 @@ class ForcedCrippling(Component):
 
         frgmax = frgmax_frg * f_rg
 
-        F_RG, G = self.ring_allowable_stress(RC, K, self.t_r, t_c, frame_e, cover_e)
+        F_RG, G = self.ring_allowable_stress(RC, K, self.t_r, t_c)
         H = A * G
 
         # Iterating for cap flange thickness, t_r
-        x_c = 0.5 * (1 - K) * cover_e / self.material.E_c
+        x_c = 0.5 * (1 - K) * self.cover_material.E / self.long_material.E
         x_b = (4 * self.b + self.c / 2) / (
             (1 + (self.c / (2 * self.rho)) ** 2) * L * t_c
         )
@@ -358,7 +365,7 @@ class ForcedCrippling(Component):
             err = t_r2 - self.t_r
             self.t_r = t_r2
 
-        return (float(t_r2), f_st)
+        return (t_r2, f_st, f_rg)
 
 
 @dataclass
