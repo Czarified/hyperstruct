@@ -79,16 +79,6 @@ class ForcedCrippling:
         return 4 * self.b * self.t_r + self.c * self.t_w
 
     @property
-    def i_xx(self) -> float:
-        """Second moment of area (bending moment of inertia).
-
-        Assumes the simplified case that t_r = 2*t_w.
-        """
-        return self.t_r * (
-            self.b * self.c**2 + 2 * self.b**3 / 3 - self.b**2 * self.c + self.c**3 / 24
-        )
-
-    @property
     def rho(self) -> float:
         """Radius of gyration."""
         return float(
@@ -806,7 +796,7 @@ class MinorFrame(Component):
 
         return float(numerator / denominator)
 
-    def acoustic_fatigue(self, b: float) -> float:
+    def acoustic_fatigue(self, d: float) -> float:
         """Thickness requirements based on acoustic fatigue.
 
         Assumptions are:
@@ -827,7 +817,7 @@ class MinorFrame(Component):
         of a purely random spectrum.
 
         Args:
-            b: Support spacing (frame spacing)
+            d: Support spacing (frame spacing)
 
         Returns:
             A float of Flange thickness.
@@ -838,9 +828,51 @@ class MinorFrame(Component):
         db_oa = db_r + 30
         P = 2.9e-9 * 10 ** (db_oa / 20)
         # Note: K_c is directly hardcoded to 7.025, per Fig. 20 of ADA002867
-        t_r = 7.025 * b**0.5 * P**2 / self.material.F_en
+        t_r = 7.025 * d**0.5 * P**2 / self.material.F_en
 
         return float(t_r)
+
+    def post_buckled(
+        self,
+        d: float,
+        h: float,
+        frame_material: Material,
+        cover_material: Material,
+        long_material: Material,
+        D: float,
+        M: float,
+        Z: float,
+        sum_z_sq: float,
+        t_c: float,
+        RC: float,
+        f_s: float,
+        f_scr: float,
+    ) -> float:
+        """Thickness required for post-buckled strength."""
+        # Pass everything directly through to the ForcedCrippling class.
+        construction = self.construction
+        t_r = self.t_r
+        b = self.b
+        c = self.c
+        check = ForcedCrippling(
+            d=d,
+            h=h,
+            c=c,
+            b=b,
+            construction=construction,
+            frame_material=frame_material,
+            cover_material=cover_material,
+            long_material=long_material,
+            t_r=t_r,
+        )
+        # Since the forced_crippling method provides the iterated value
+        # directly, we only need the first value in the returned tuple.
+        # No further analysis is necessary.
+        t, _, _ = check.forced_crippling(
+            D=D, M=M, Z=Z, sum_z_sq=sum_z_sq, t_c=t_c, RC=RC, f_s=f_s, f_scr=f_scr
+        )
+
+        return float(t)
 
 
 @dataclass
