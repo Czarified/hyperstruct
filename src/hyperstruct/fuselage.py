@@ -191,6 +191,23 @@ class ForcedCrippling:
         Uses Bruhn Fig. C11.38 to iterate on thickness equations
         until sufficient error is achieved. Sets the allowable
         the figure equal to the analytical formulation.
+
+        Args:
+            K: Diagonal Tension factor from empirical relations
+            alpha: Angle of folds
+            D: Fuselage Diameter
+            L: Frame spacing
+            t_c: Cover thickness
+            RC: Side panel radius of curvature
+            A: Frame cross-sectional area
+            f_s: Shear stress in Cover at cut
+            f_u: Axial stress in stiffening member
+
+        Returns:
+            float iterated minimal flange thickness
+
+        Raises:
+            ValueError: D and L cannot be successfully compared.
         """
         # Max stress is based on an empirical relation from Bruhn.
         # This is dependent on the ratio of frame/longeron spacing.
@@ -228,7 +245,7 @@ class ForcedCrippling:
             err = t_r2 - self.t_r
             self.t_r = t_r2
 
-        return t_r2
+        return float(t_r2)
 
     def forced_crippling(
         self,
@@ -286,7 +303,6 @@ class ForcedCrippling:
 
         Raises:
             AttributeError: The construction attribute is not properly defined.
-            ValueError: D and L cannot be successfully compared.
         """
         # Frame spacing is referenced as L in SWEEP, but d in Bruhn.
         L = self.d
@@ -1056,7 +1072,7 @@ class Longeron(Component):
         """Area required for post-buckled strength."""
         # t_s = self.t_s
         b = self.b
-        c = self.c
+        c = self.b
         long_material = self.material
 
         check = ForcedCrippling(
