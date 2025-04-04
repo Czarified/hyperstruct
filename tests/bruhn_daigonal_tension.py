@@ -44,9 +44,13 @@ t_r, f_st, f_rg = example_34.forced_crippling(
     D=65.8, M=1.475e6, Z=32.9, sum_z_sq=120, t_c=0.032, RC=30.0, f_s=6000, f_scr=815
 )
 
-print(f" Minimum frame cap thickness = {t_r:.3f} [in]")
-print(f"Secondary stress in stringer = {f_st:.0f} [psi]")
-print(f"    Secondary stress in ring = {f_rg:.0f} [psi]")
+# Bruhn values:
+t_r_b = 0.040
+f_st_b = 26490
+f_rg_b = 7610
+print(f" Minimum frame cap thickness = {t_r:.3f} vs {t_r_b:.3f} [in]")
+print(f"Secondary stress in stringer = {f_st:.0f} vs {f_st_b:.0f} [psi]")
+print(f"    Secondary stress in ring = {f_rg:.0f}  vs  {f_rg_b:.0f} [psi]")
 
 
 # Example C11.37
@@ -88,6 +92,10 @@ t_r, f_st, f_rg = example_34.forced_crippling(
     f_s=4240,
     f_scr=313,
 )
-print(f" Minimum frame cap thickness = {t_r:.3f} [in]")
-print(f"Secondary stress in longeron = {f_st:.0f} [psi]")
-print(f"    Secondary stress in ring = {f_rg:.0f} [psi]")
+# Bruhn values:
+t_r_b = 0.032
+f_st_b = 37200 + 12780
+f_rg_b = 27900
+print(f" Minimum frame cap thickness = {t_r:.3f} vs {t_r_b:.3f} [in]")
+print(f"Secondary stress in longeron = {f_st:.0f} vs {f_st_b:.0f} [psi]")
+print(f"    Secondary stress in ring = {f_rg:.0f}  vs {f_rg_b:.0f} [psi]")

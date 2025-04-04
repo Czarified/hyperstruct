@@ -94,19 +94,19 @@ class ForcedCrippling:
             ** 0.5
         )
 
-    def ring_allowable_stress(
+    def bruhn_allowable_stress(
         self, RC: float, K: float, t_r: float, t_c: float
     ) -> Tuple[float, float]:
-        """Allowable ring stress for the Forced Crippling method.
+        """Allowable stress for the Forced Crippling method.
 
         Args:
             RC: Radius of curvature
             K: Diagonal tension factor
-            t_r: Frame flange thickness
+            t_r: Stiffener (ring/longer/stringer) thickness
             t_c: Cover thickness
 
         Returns:
-            A tuple of (F_RG, G), Frame allowable stress,
+            A tuple of (F_RG, G), allowable stress,
             and emiprical factor from Bruhn.
         """
         # Allowable ring frame stress
@@ -173,6 +173,62 @@ class ForcedCrippling:
             )
 
         return float(k)
+
+    def iterate_thickness(
+        self,
+        K: float,
+        alpha: float,
+        D: float,
+        L: float,
+        t_c: float,
+        RC: float,
+        A: float,
+        f_s: float,
+        f_u: float,
+    ) -> float:
+        """Iteration procedure for minimum thickness.
+
+        Uses Bruhn Fig. C11.38 to iterate on thickness equations
+        until sufficient error is achieved. Sets the allowable
+        the figure equal to the analytical formulation.
+        """
+        # Max stress is based on an empirical relation from Bruhn.
+        # This is dependent on the ratio of frame/longeron spacing.
+        # This relation applies for both the applied stress, f, and the allowable stress, F.
+        if L / D <= 1.2:
+            f_umax_fu = 1 + 0.78 * (1 - K) - 0.65 * L / D * (1 - K)
+        elif L / D > 1.2:
+            f_umax_fu = 1.0
+        else:
+            raise ValueError(
+                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
+            )
+
+        f_umax = f_umax_fu * f_u
+
+        F_u, G = self.bruhn_allowable_stress(RC, K, self.t_r, t_c)
+        H = A * G
+
+        x_c = 0.5 * (1 - K) * self.cover_material.E / self.long_material.E
+        x_b = (4 * self.b + self.c / 2) / (
+            (1 + (self.c / (2 * self.rho)) ** 2) * L * t_c
+        )
+        x_a = ((f_s * np.tan(alpha) / H) * (f_umax / F_u)) ** 3 * t_c * K
+
+        # An initialization for optimizing
+        err = 100
+        while err > 0.1:
+            t_r2 = self.t_r - (
+                (self.t_r * (self.t_r * x_b + x_c) ** 3 + x_a)
+                / (
+                    3 * x_b * self.t_r * (self.t_r * x_b + x_c) ** 2
+                    + (self.t_r * x_b + x_c) ** 3
+                )
+            )
+            err = t_r2 - self.t_r
+            self.t_r = t_r2
+
+        return t_r2
 
     def forced_crippling(
         self,
@@ -318,42 +374,9 @@ class ForcedCrippling:
                 "The MinorFrame attribute 'construction' is not properly defined. Acceptable options are 'stringer' or 'longeron'"
             )
 
-        # Max stress in the frame is based on an empirical relation from Bruhn.
-        # This is dependent on the ratio of frame/longeron spacing.
-        # This relation applies for both the applied stress, f, and the allowable stress, F.
-        if L / D <= 1.2:
-            frgmax_frg = 1 + 0.78 * (1 - K) - 0.65 * L / D * (1 - K)
-        elif L / D > 1.2:
-            frgmax_frg = 1.0
-        else:
-            raise ValueError(
-                "Frame Spacing (L) and Fuselage Diameter (D) cannot be properly compared."
-            )
-
-        frgmax = frgmax_frg * f_rg
-
-        F_RG, G = self.ring_allowable_stress(RC, K, self.t_r, t_c)
-        H = A * G
-
-        # Iterating for cap flange thickness, t_r
-        x_c = 0.5 * (1 - K) * self.cover_material.E / self.long_material.E
-        x_b = (4 * self.b + self.c / 2) / (
-            (1 + (self.c / (2 * self.rho)) ** 2) * L * t_c
+        t_r2 = self.iterate_thickness(
+            K=K, alpha=alpha, D=D, L=L, t_c=t_c, RC=RC, A=A, f_s=f_s, f_u=f_rg
         )
-        x_a = ((f_s * np.tan(alpha) / H) * (frgmax / F_RG)) ** 3 * t_c * K
-
-        # An initialization for optimizing
-        err = 100
-        while err > 0.1:
-            t_r2 = self.t_r - (
-                (self.t_r * (self.t_r * x_b + x_c) ** 3 + x_a)
-                / (
-                    3 * x_b * self.t_r * (self.t_r * x_b + x_c) ** 2
-                    + (self.t_r * x_b + x_c) ** 3
-                )
-            )
-            err = t_r2 - self.t_r
-            self.t_r = t_r2
 
         return (t_r2, f_st, f_rg)
 
@@ -837,7 +860,6 @@ class MinorFrame(Component):
         d: float,
         h: float,
         frame_material: Material,
-        cover_material: Material,
         long_material: Material,
         D: float,
         M: float,
@@ -854,6 +876,7 @@ class MinorFrame(Component):
         t_r = self.t_r
         b = self.b
         c = self.c
+        cover_material = self.material
         check = ForcedCrippling(
             d=d,
             h=h,
@@ -1014,11 +1037,56 @@ class Longeron(Component):
 
         return A_l
 
-    def forced_cripping(self) -> None:
-        """Not implmented yet. Will be the same as MinorFrames."""
-        raise NotImplementedError(
-            "This will follow similar procedures at the MinorFrame."
+    def post_buckled(
+        self,
+        d: float,
+        h: float,
+        construction: str,
+        frame_material: Material,
+        cover_material: Material,
+        D: float,
+        M: float,
+        Z: float,
+        sum_z_sq: float,
+        t_c: float,
+        RC: float,
+        f_s: float,
+        f_scr: float,
+    ) -> float:
+        """Area required for post-buckled strength."""
+        # t_s = self.t_s
+        b = self.b
+        c = self.c
+        long_material = self.material
+
+        check = ForcedCrippling(
+            d=d,
+            h=h,
+            c=c,
+            b=b,
+            construction=construction,
+            frame_material=frame_material,
+            cover_material=cover_material,
+            long_material=long_material,
         )
+        # Since the forced_crippling method does not provide the iterated value
+        # directly, we need to proceed with the iteration procedure to get
+        # required area.
+        _, f_st, _ = check.forced_crippling(
+            D=D, M=M, Z=Z, sum_z_sq=sum_z_sq, t_c=t_c, RC=RC, f_s=f_s, f_scr=f_scr
+        )
+
+        # Iterating for longeron area, A_s
+
+        # # An initialization for optimizing
+        # err = 100
+        # while err > 0.1:
+        #     A_s = do_a_thing()
+
+        #     err = A_s2 - self.area
+        #     self.area = A_s2
+
+        return 1.0
 
 
 @dataclass
