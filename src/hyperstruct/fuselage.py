@@ -7,6 +7,8 @@ This file contains all global variables, classes, and functions related to fusel
 
 from dataclasses import dataclass
 from typing import Any
+from typing import Dict
+from typing import List
 from typing import Tuple
 
 import numpy as np
@@ -1353,10 +1355,34 @@ class MajorFrame(Component):
     or may be common frames. Common frames, those which occur at the same fuselage stations,
     are designed for th combined loads from as many as three (3) sources (e.g. a frame which
     is used for reacting the wing rear spar, main landing gear trunnion, and forward nacelle).
+
+
+    Determine External Forces
+    Define Geometry
+        Determine synthesis cuts around the periphery
+    Calculate Internal Ring Loads
+        At the midpoint of each ring segment
+    Size the Ring elements
+    Calculate the Weight
+
+    'i' denotes a cut
+    'j' denotes a segment
+    'jj' = total number of segments
+    A frame is divided into segments of equal length, 'dls_j'
     """
 
     fs_loc: float
     """Fuselage Station location (e.g. 150in from origin)."""
+
+    loads: Dict[List[float], List[float]]
+    """The loads list contains all external loads applied on this frame.
+
+    Loads are provided as a dictionary. The keys are the y and z coordinates of
+    the concentrated loads (BL and WL). The values are, respectively, the vertical
+    force, horizontal force, and moment.
+
+    Note: There is not strict control differentiating between coordinate or load vectors!
+    """
 
 
 @dataclass
