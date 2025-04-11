@@ -1364,11 +1364,6 @@ class MajorFrame(Component):
         At the midpoint of each ring segment
     Size the Ring elements
     Calculate the Weight
-
-    'i' denotes a cut
-    'j' denotes a segment
-    'jj' = total number of segments
-    A frame is divided into segments of equal length, 'dls_j'
     """
 
     fs_loc: float
@@ -1383,6 +1378,87 @@ class MajorFrame(Component):
 
     Note: There is not strict control differentiating between coordinate or load vectors!
     """
+
+    def elastic_center(self) -> None:
+        """Uses the elastic center method to derive segment internal loads.
+
+        This method evaluated the internal loads on a segment based on the external
+        loads and a fixed-fixed boundary condition for an arch.
+
+        This method is primarily based on Bruhn Sec. A9.
+        """
+        pass
+
+    def sizing(
+        self, vv: float, aa: float, ben: float, dlsp: float, fd: float, k: float = 0.9
+    ) -> float:
+        """Sizing approach for a segment.
+
+        The sizing approach assumes shear resistant webs with the caps determined
+        by material allowable and flange crippling. Frame stiffeners are assumed to
+        be one gage greater than the web gage (+.005"). Ring segments are sized for
+        each external load condition. Since each load condition may be at a different
+        structure design temperature, material properties at the appropriate
+        condition are used.
+
+        Args:
+             vv : Beam shear at the center of the segment
+             aa : Beam axial load (at neutral axis)
+            ben : Bending of the segment
+           dlsp : Segment linear length (at neutral axis)
+             fd : Frame depth at the segment
+              k : Reduction factor (default 0.9)
+
+        Returns:
+            float of frame segment weight
+        """
+        # Area required from bending strength
+        # Criteria: No Yield at Limit
+        fa = abs(ben / fd) + abs(aa / 2)
+        cap_area_bend = fa / (k * self.material.F_cy)
+
+        # Area required from flange crippling
+        # Criteria: Equate strength and applied crippling stress
+        k_c = 0.426
+        tcap = np.sqrt(
+            cap_area_bend
+            / 2
+            * np.sqrt(
+                k
+                * self.material.F_cy
+                * 12
+                * (1 - self.material.nu**2)
+                / (k_c * np.pi**2 * self.material.E)
+            )
+        )
+
+        # Using these, now solve for required cap width.
+        # Assume only caps react bending.
+        bb_2 = cap_area_bend / (2 * tcap)
+
+        # Web thickness based on shear strength
+        k_s = 7.5
+        t_w_str = vv / (fd(self.material.F_su))
+
+        # Web thickness based on shear resistance
+        t_w_res = (
+            abs(vv)
+            * fd
+            * 12
+            * (1 - self.material.nu**2)
+            / (k_s * np.pi**2 * self.material.E)
+        ) ** (1 / 3)
+
+        # Final value of web thickness
+        t_w = max(t_w_str, t_w_res, tcap / 2)
+
+        # The 5 thal is for stiffener thickness
+        # Assumption is taking section cuts where 1 stiffener per segment.
+        # When you stack them all together, each segment will be "bounded" by stiffeners
+        volume = (bb_2 * (t_w + 0.005)) + (2 * bb_2 * tcap) + (fd * t_w)
+        weight = self.material.rho * dlsp * volume
+
+        return float(weight)
 
 
 @dataclass
