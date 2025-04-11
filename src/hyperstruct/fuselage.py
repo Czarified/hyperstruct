@@ -1402,12 +1402,12 @@ class MajorFrame(Component):
         condition are used.
 
         Args:
-             vv : Beam shear at the center of the segment
-             aa : Beam axial load (at neutral axis)
+            vv : Beam shear at the center of the segment
+            aa : Beam axial load (at neutral axis)
             ben : Bending of the segment
-           dlsp : Segment linear length (at neutral axis)
-             fd : Frame depth at the segment
-              k : Reduction factor (default 0.9)
+            dlsp : Segment linear length (at neutral axis)
+            fd : Frame depth at the segment
+            k : Reduction factor (default 0.9)
 
         Returns:
             float of frame segment weight
@@ -1438,7 +1438,7 @@ class MajorFrame(Component):
 
         # Web thickness based on shear strength
         k_s = 7.5
-        t_w_str = vv / (fd(self.material.F_su))
+        t_w_str = abs(vv) / (fd * self.material.F_su)
 
         # Web thickness based on shear resistance
         t_w_res = (
