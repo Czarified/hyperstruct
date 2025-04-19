@@ -21,6 +21,7 @@ click = ">=8.0.1"
 numpy = "^1.26.4"
 scipy = "^1.14.1"
 matplotlib = "^3.10.1"
+pytest-check = "^2.5.3"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.8.0"

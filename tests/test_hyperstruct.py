@@ -1,9 +1,8 @@
 """Test cases for the general module."""
 
+import numpy as np
 import pytest
-from matplotlib.patches import Circle
-from matplotlib.patches import Ellipse
-from matplotlib.patches import FancyBboxPatch
+import pytest_check as pycheck
 
 from hyperstruct import Station
 
@@ -68,37 +67,73 @@ def rounded() -> Station:
     return obj
 
 
+def test_circle(circle: Station) -> None:
+    """Test the Circular station."""
+    pycheck.is_false(circle.is_ellipse)
+    upper = circle.upper_panel
+    lower = circle.lower_panel
+    side = circle.side_panel
+    pycheck.almost_equal(upper, 47.1, abs=0.1)
+    pycheck.almost_equal(lower, 47.1, abs=0.1)
+    pycheck.almost_equal(side, 47.1, abs=0.1)
+
+    arc = circle.arc_length(0.0, np.pi / 4)
+    pycheck.almost_equal(arc, 23.56, abs=0.1)
+
+
+def test_oval_1(obj: Station) -> None:
+    """Test an Oval station."""
+    pycheck.is_true(obj.is_ellipse)
+    upper = obj.upper_panel
+    lower = obj.lower_panel
+    side = obj.side_panel
+    pycheck.almost_equal(upper, 47.1, abs=0.1)
+    pycheck.almost_equal(lower, 47.1, abs=0.1)
+    pycheck.almost_equal(side, 47.1, abs=0.1)
+
+    arc = circle.arc_length(0.0, np.pi / 4)
+    pycheck.almost_equal(arc, 23.56, abs=0.1)
+
+
 if __name__ == "__main__":  # pragma: no cover
     # This is sample code from the Matplotlib Ellipse example.
     # Playground stuff to learn how to plot these shapes.
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from matplotlib.patches import Ellipse
+    # import matplotlib.pyplot as plt
+    # import numpy as np
+    # from matplotlib.patches import Ellipse
 
-    # Fixing random state for reproducibility
-    np.random.seed(19680801)
+    # # Fixing random state for reproducibility
+    # np.random.seed(19680801)
 
-    NUM = 10
+    # NUM = 10
 
-    ells = [
-        Ellipse(
-            xy=np.random.rand(2) * 10,
-            width=np.random.rand(),
-            height=np.random.rand(),
-            angle=np.random.rand() * 360,
-            fill=False,
-            edgecolor=np.random.rand(3),
-        )
-        for i in range(NUM)
-    ]
+    # ells = [
+    #     Ellipse(
+    #         xy=np.random.rand(2) * 10,
+    #         width=np.random.rand(),
+    #         height=np.random.rand(),
+    #         angle=np.random.rand() * 360,
+    #         fill=False,
+    #         edgecolor=np.random.rand(3),
+    #     )
+    #     for i in range(NUM)
+    # ]
 
-    fig, ax = plt.subplots()
-    ax.set(xlim=(0, 10), ylim=(0, 10), aspect="equal")
+    # fig, ax = plt.subplots()
+    # ax.set(xlim=(0, 10), ylim=(0, 10), aspect="equal")
 
-    for e in ells:
-        ax.add_artist(e)
-        e.set_clip_box(ax.bbox)
-        # e.set_alpha(np.random.rand())
-        # e.set_facecolor(np.random.rand(3))
+    # for e in ells:
+    #     ax.add_artist(e)
+    #     e.set_clip_box(ax.bbox)
 
-    plt.show()
+    # plt.show()
+    obj = Station(
+        orientation="FS",
+        name="Rounded Rectangle",
+        number=400.0,
+        width=60.0,
+        depth=60.0,
+        vertical_centroid=60.0,
+        radius=25,
+    )
+    obj.show()

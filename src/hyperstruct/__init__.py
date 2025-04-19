@@ -3,7 +3,11 @@
 from dataclasses import dataclass
 from importlib.metadata import version
 
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Circle
+from matplotlib.patches import Ellipse
+from matplotlib.patches import FancyBboxPatch
 from scipy.special import ellipeinc
 
 
@@ -194,7 +198,7 @@ class Station:
         else:
             return 2 * self.doo + np.pi / 2 * self.radius
 
-    def elliptical_arc_length(self, theta_start: float, theta_end: float) -> float:
+    def arc_length(self, theta_start: float, theta_end: float) -> float:
         """This method calculates the length of an elliptic curve.
 
         The semi-major axis is the distance from the centroid to the apex of
@@ -222,7 +226,7 @@ class Station:
         # eccentricity
         m = 1 - (b / a) ** 2
 
-        arc_length = a * (ellipeinc(theta_end, m) - ellipeinc(theta_start, m))
+        arc_length = a * (ellipeinc(theta_end, m) - ellipeinc(theta_start, m)) / 2
 
         return float(arc_length)
 
@@ -239,3 +243,49 @@ class Station:
             return 0.0
         else:
             raise NotImplementedError
+
+    def show(self) -> None:
+        """Plot the station shape for a visual check.
+
+        This method just uses matplotlib to draw the shape on a plot.
+        It will select the appropriate shape (Artist) object, based on
+        the Station properties, and put in a figure on it's own.
+        """
+        fig, ax = plt.subplots()
+        lower_y = 0.0 if self.vertical_centroid >= 0 else self.vertical_centroid
+        ax.set(
+            xlim=(-1.1 * self.width, 1.1 * self.width),
+            ylim=(lower_y, 1.1 * self.depth + self.vertical_centroid),
+            aspect="equal",
+        )
+
+        if self.is_ellipse:
+            obj = Ellipse(
+                xy=(0, self.vertical_centroid),
+                width=self.width,
+                height=self.depth,
+                fill=False,
+                edgecolor="black",
+            )
+        elif self.radius < self.width / 2:
+            xy = (-self.width / 2, self.vertical_centroid - self.depth / 2)
+            style = f"Round, pad=0.2, rounding_size={self.radius}"
+            obj = FancyBboxPatch(
+                xy=xy,
+                width=self.width,
+                height=self.depth,
+                boxstyle=style,
+                fill=False,
+                edgecolor="black",
+            )
+        else:
+            obj = Circle(
+                xy=(0, self.vertical_centroid),
+                radius=self.radius,
+                fill=False,
+                edgecolor="black",
+            )
+        ax.add_artist(obj)
+        obj.set_clip_box(ax.bbox)
+
+        plt.show()
