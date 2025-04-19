@@ -167,7 +167,7 @@ class Station:
         elif self.is_ellipse:
             start = 3 * np.pi / 4
             end = np.pi / 4
-            arc = self.elliptical_arc_length(start, end)
+            arc = self.arc_length(start, end)
             return arc
         else:
             return 2 * self.wo + np.pi / 2 * self.radius
@@ -180,7 +180,7 @@ class Station:
         elif self.is_ellipse:
             start = -3 * np.pi / 4
             end = -np.pi / 4
-            arc = self.elliptical_arc_length(start, end)
+            arc = self.arc_length(start, end)
             return arc
         else:
             return 2 * self.wo + np.pi / 2 * self.radius
@@ -193,7 +193,7 @@ class Station:
         elif self.is_ellipse:
             start = np.pi / 4
             end = -np.pi / 4
-            arc = self.elliptical_arc_length(start, end)
+            arc = self.arc_length(start, end)
             return arc
         else:
             return 2 * self.doo + np.pi / 2 * self.radius

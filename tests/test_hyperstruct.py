@@ -69,64 +69,101 @@ def rounded() -> Station:
 
 def test_circle(circle: Station) -> None:
     """Test the Circular station."""
-    pycheck.is_false(circle.is_ellipse)
     upper = circle.upper_panel
     lower = circle.lower_panel
     side = circle.side_panel
+    arc = circle.arc_length(0.0, np.pi / 4)
+
+    pycheck.is_false(circle.is_ellipse)
+    
     pycheck.almost_equal(upper, 47.1, abs=0.1)
     pycheck.almost_equal(lower, 47.1, abs=0.1)
     pycheck.almost_equal(side, 47.1, abs=0.1)
 
-    arc = circle.arc_length(0.0, np.pi / 4)
     pycheck.almost_equal(arc, 23.56, abs=0.1)
 
 
-def test_oval_1(obj: Station) -> None:
+def test_oval_1(oval_deep: Station) -> None:
     """Test an Oval station."""
-    pycheck.is_true(obj.is_ellipse)
-    upper = obj.upper_panel
-    lower = obj.lower_panel
-    side = obj.side_panel
-    pycheck.almost_equal(upper, 47.1, abs=0.1)
-    pycheck.almost_equal(lower, 47.1, abs=0.1)
-    pycheck.almost_equal(side, 47.1, abs=0.1)
+    upper = oval_deep.upper_panel
+    lower = oval_deep.lower_panel
+    side = oval_deep.side_panel
+    arc = oval_deep.arc_length(0.0, np.pi / 4)
 
-    arc = circle.arc_length(0.0, np.pi / 4)
-    pycheck.almost_equal(arc, 23.56, abs=0.1)
+    pycheck.is_true(oval_deep.is_ellipse)
+
+    pycheck.almost_equal(upper, -31.7, abs=0.1)
+    pycheck.almost_equal(lower, 31.7, abs=0.1)
+    pycheck.almost_equal(side, -44.1, abs=0.1)
+
+    pycheck.almost_equal(arc, 22.0, abs=0.1)
+
+
+def test_oval_2(oval_wide: Station) -> None:
+    """Test an Oval station."""
+    upper = oval_wide.upper_panel
+    lower = oval_wide.lower_panel
+    side = oval_wide.side_panel
+    arc = oval_wide.arc_length(0.0, np.pi / 4)
+
+    pycheck.is_true(oval_wide.is_ellipse)
+
+    pycheck.almost_equal(upper, -31.7, abs=0.1)
+    pycheck.almost_equal(lower, 31.7, abs=0.1)
+    pycheck.almost_equal(side, -44.1, abs=0.1)
+
+    pycheck.almost_equal(arc, 22.0, abs=0.1)
+
+
+def test_rounded(rounded: Station) -> None:
+    """Test a Rounded station."""
+    upper = rounded.upper_panel
+    lower = rounded.lower_panel
+    side = rounded.side_panel
+    arc = rounded.arc_length(0.0, np.pi / 4)
+
+    pycheck.is_false(rounded.is_ellipse)
+
+    # pycheck.almost_equal(upper, -31.7, abs=0.1)
+    # pycheck.almost_equal(lower, 31.7, abs=0.1)
+    # pycheck.almost_equal(side, -44.1, abs=0.1)
+
+    # pycheck.almost_equal(arc, 22.0, abs=0.1)
+
 
 
 if __name__ == "__main__":  # pragma: no cover
     # This is sample code from the Matplotlib Ellipse example.
     # Playground stuff to learn how to plot these shapes.
-    # import matplotlib.pyplot as plt
-    # import numpy as np
-    # from matplotlib.patches import Ellipse
+        # import matplotlib.pyplot as plt
+        # import numpy as np
+        # from matplotlib.patches import Ellipse
 
-    # # Fixing random state for reproducibility
-    # np.random.seed(19680801)
+        # # Fixing random state for reproducibility
+        # np.random.seed(19680801)
 
-    # NUM = 10
+        # NUM = 10
 
-    # ells = [
-    #     Ellipse(
-    #         xy=np.random.rand(2) * 10,
-    #         width=np.random.rand(),
-    #         height=np.random.rand(),
-    #         angle=np.random.rand() * 360,
-    #         fill=False,
-    #         edgecolor=np.random.rand(3),
-    #     )
-    #     for i in range(NUM)
-    # ]
+        # ells = [
+        #     Ellipse(
+        #         xy=np.random.rand(2) * 10,
+        #         width=np.random.rand(),
+        #         height=np.random.rand(),
+        #         angle=np.random.rand() * 360,
+        #         fill=False,
+        #         edgecolor=np.random.rand(3),
+        #     )
+        #     for i in range(NUM)
+        # ]
 
-    # fig, ax = plt.subplots()
-    # ax.set(xlim=(0, 10), ylim=(0, 10), aspect="equal")
+        # fig, ax = plt.subplots()
+        # ax.set(xlim=(0, 10), ylim=(0, 10), aspect="equal")
 
-    # for e in ells:
-    #     ax.add_artist(e)
-    #     e.set_clip_box(ax.bbox)
+        # for e in ells:
+        #     ax.add_artist(e)
+        #     e.set_clip_box(ax.bbox)
 
-    # plt.show()
+        # plt.show()
     obj = Station(
         orientation="FS",
         name="Rounded Rectangle",
