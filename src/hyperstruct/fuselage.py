@@ -1379,20 +1379,75 @@ class MajorFrame(Component):
     Note: There is not strict control differentiating between coordinate or load vectors!
     """
 
-    def elastic_center(self) -> None:
-        """Uses the elastic center method to derive segment internal loads.
+    geom: Station
+    """The MajorFrame Geometry.
 
-        This method evaluated the internal loads on a segment based on the external
-        loads and a fixed-fixed boundary condition for an arch.
+    The geometry is a Station type, which provides the general shape dimensions. This
+    would be the Outer Mold Line (OML) of the MajorFrame.
+    """
 
-        This method is primarily based on Bruhn Sec. A9.
+    def synthesis(self, num: int = 60) -> None:
+        """Controls the frame weight estimating process. [FFRME].
+
+        Organizes load data and calls geometry and internal load routines
+        to calculate sizing and weight.
+
+        Args:
+            num : Integer number of cuts to take around the periphery. Default 60.
         """
+        # Synthesis cut coordinates
+        self.geometry_cuts(num)
+
+        # Frame Total Loads
+        vertical = 0
+        horizontal = 0
+        torque = 0
+        for (y, z), v in self.loads.items():
+            vertical += v[0]
+            horizontal += v[1]
+            # TODO: Torque
+            # torque += v[2] + v[0] * y + v[1] * (z - zzf)
+
+        # Calculate internal frame loads
+        self.internal_loads()
+
+        # Final structural synthesis
+        self.sizing()
+
+    def geometry_cuts(self, num: int) -> None:
+        """Calculate the frame node coordinates for all synthesis cuts.
+
+        Should the frame occur in the first shell synthesis segment, the geometric
+        definition at the first shell synthesis cut is used for that frame. The
+        geometry of all other frames is determined by interpolating between the
+        bounding shell synthesis cuts. The frame synthesis cut coordinates are based
+        on equal-length segments along the xternal contour of that frame. The first
+        cut is taken at top centerline, which also defines the coordinates of the last cut.
+        """
+        # Initialize the cut dictionaries, so we can reference them later
+        cut_geom = {}
+        cut_loads = {}
+        for cut in range(num):
+            # Geometry collection
+            cut_geom[cut] = None
+            # Loads collection
+            cut_loads[cut] = None
+
+    def internal_loads(self) -> Tuple[float]:
+        """Calculates the internal loads at the midpoint of a segment. [FRMLD].
+
+        For each component, the loads at the center is a function of the forces at
+        each end (i, and i1), as well as contributions from the frame total loads (_0)
+        at the fuselage centerline.
+        """
+        # Bending
+        # ben = bmo + v_0 * ypb + h_0 * (zpb - zzf) + 0.5 * (moment_i + moment_i1)
         pass
 
     def sizing(
         self, vv: float, aa: float, ben: float, dlsp: float, fd: float, k: float = 0.9
     ) -> float:
-        """Sizing approach for a segment.
+        """Sizing approach for a segment. [SFOAWE].
 
         The sizing approach assumes shear resistant webs with the caps determined
         by material allowable and flange crippling. Frame stiffeners are assumed to

@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 from importlib.metadata import version
+from typing import List
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -244,7 +246,7 @@ class Station:
         else:
             raise NotImplementedError
 
-    def show(self) -> None:
+    def show(self, coords: List[float] = None) -> None:
         """Plot the station shape for a visual check.
 
         This method just uses matplotlib to draw the shape on a plot.
@@ -288,4 +290,129 @@ class Station:
         ax.add_artist(obj)
         obj.set_clip_box(ax.bbox)
 
+        # Plot the Corner Centers
+        center_x = [self.wo, self.wo, -self.wo, -self.wo]
+        center_y = [
+            self.doo + self.vertical_centroid,
+            -self.doo + self.vertical_centroid,
+            -self.doo + self.vertical_centroid,
+            self.doo + self.vertical_centroid,
+        ]
+        _ = ax.plot(
+            center_x,
+            center_y,
+            marker="+",
+            markerfacecolor="none",
+            markeredgecolor="black",
+            markersize=10,
+            linestyle="none",
+        )
+
+        if coords:
+            for x, y in coords:
+                ax.plot(
+                    x,
+                    y,
+                    marker="o",
+                    markerfacecolor="red",
+                    markeredgecolor="none",
+                    markersize=5,
+                )
         plt.show()
+
+    def get_coords(self, theta: float) -> Tuple[float]:
+        """Get the planar coordinates of the shape intersection with a straight line at angle theta.
+
+        Coordinate extraction varies from the simplistic (Circle), to the very complext case of the
+        rounded rectangle. The method used to evaluate the coordinates depends on the shape family
+        (circle, ellipse, or rounded rectangle).
+
+        Args:
+            theta:  polar angle to calculate the intersection with. This must be in radians.
+                    Note that the angle is measured clockwise from the vertical axis (12 o'clock)
+
+        Returns:
+            Tuple of coordinates as floats, for example (x, y)
+
+        Raises:
+            ValueError: If the corner intersection cannot be found.
+                        This means there's a problem with the code, or the given shape.
+        """
+        if self.is_ellipse:
+            # Calculate the eccentricity
+            a = self.width / 2
+            b = self.depth / 2
+            e = np.sqrt(1 - (b / a) ** 2)
+            alpha = np.pi / 2 - theta
+            # Vector length to curve intersection point
+            r = b / np.sqrt(1 - (e * np.cos(alpha)) ** 2)
+            # Use trig to get the xy instead of polar
+            x = r * np.sin(theta)
+            y = r * np.cos(theta) + self.vertical_centroid
+        elif self.radius < self.width / 2:
+            # Rounded rectangle
+            # Start with the inscribed circle xy
+            r = self.depth / 2
+            xx = r * np.sin(theta)
+            yy = r * np.cos(theta)
+            if abs(xx) <= self.wo:
+                # Intersection is on horizontal portion
+                # Use a triangle instead of circle
+                x = r * np.tan(theta)
+                y = np.sign(yy) * r + self.vertical_centroid
+            elif abs(yy) <= self.doo:
+                # Intersection is on vertical portion
+                # Use a triangle instead of a circle
+                x = np.sign(xx) * self.width / 2
+                y = 0.5 * self.width * np.tan(theta) + self.vertical_centroid
+            else:
+                # Intersection is on corner
+                # Set the equation for the line and the corner circle equal to each other
+                # Slope of line, y-intercept is zero; y = mx+ 0
+                rise = self.depth / 2
+                run = rise * np.tan(theta)
+                m = rise / run
+
+                # Plugging the linear equation into the circle equation and
+                # solving for the dependent variable
+                a = m**2 + 1
+                b = -2 * (self.wo + m * self.doo)
+                c = self.wo**2 + self.doo**2 - self.radius**2
+                x_1 = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+                x_2 = (-b - np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+                y_1 = m * x_1
+                y_2 = m * x_2
+                # Angles are measured CW from the vertical axis
+                theta_1 = np.arctan(x_1 / y_1)
+                theta_2 = np.arctan(x_2 / y_2)
+
+                corner_start = np.arctan(self.wo / (0.5 * self.depth))
+                corner_end = np.arctan((0.5 * self.width) / self.doo)
+
+                print(f"    m = {m:.2f}")
+                print(f"    x_1 = {x_1:.2f}")
+                print(f"    x_2 = {x_2:.2f}")
+                print(f"    y_1 = {y_1:.2f}")
+                print(f"    y_2 = {y_2:.2f}")
+                print(f"    theta_1 = {theta_1:.2f}")
+                print(f"    theta_2 = {theta_2:.2f}")
+                print(f"    start = {corner_start:.2f}")
+                print(f"    end = {corner_end:.2f}")
+                if (theta_1 >= corner_start) and (theta_1 <= corner_end):
+                    x = x_1
+                    y = y_1 + self.vertical_centroid
+                    print("Theta_1 intersects.")
+                elif (theta_2 >= corner_start) and (theta_2 <= corner_end):
+                    x = x_2
+                    y = y_2 + self.vertical_centroid
+                    print("Theta_2 intersects.")
+                else:
+                    raise ValueError("Could not find an intersection in the corner!")
+        else:
+            # It's a circle
+            r = self.radius
+            # Use trig to get the xy instead of polar
+            x = r * np.sin(theta)
+            y = r * np.cos(theta) + self.vertical_centroid
+
+        return (float(x), float(y))

@@ -75,7 +75,7 @@ def test_circle(circle: Station) -> None:
     arc = circle.arc_length(0.0, np.pi / 4)
 
     pycheck.is_false(circle.is_ellipse)
-    
+
     pycheck.almost_equal(upper, 47.1, abs=0.1)
     pycheck.almost_equal(lower, 47.1, abs=0.1)
     pycheck.almost_equal(side, 47.1, abs=0.1)
@@ -131,39 +131,38 @@ def test_rounded(rounded: Station) -> None:
     # pycheck.almost_equal(arc, 22.0, abs=0.1)
 
 
-
 if __name__ == "__main__":  # pragma: no cover
     # This is sample code from the Matplotlib Ellipse example.
     # Playground stuff to learn how to plot these shapes.
-        # import matplotlib.pyplot as plt
-        # import numpy as np
-        # from matplotlib.patches import Ellipse
+    # import matplotlib.pyplot as plt
+    # import numpy as np
+    # from matplotlib.patches import Ellipse
 
-        # # Fixing random state for reproducibility
-        # np.random.seed(19680801)
+    # # Fixing random state for reproducibility
+    # np.random.seed(19680801)
 
-        # NUM = 10
+    # NUM = 10
 
-        # ells = [
-        #     Ellipse(
-        #         xy=np.random.rand(2) * 10,
-        #         width=np.random.rand(),
-        #         height=np.random.rand(),
-        #         angle=np.random.rand() * 360,
-        #         fill=False,
-        #         edgecolor=np.random.rand(3),
-        #     )
-        #     for i in range(NUM)
-        # ]
+    # ells = [
+    #     Ellipse(
+    #         xy=np.random.rand(2) * 10,
+    #         width=np.random.rand(),
+    #         height=np.random.rand(),
+    #         angle=np.random.rand() * 360,
+    #         fill=False,
+    #         edgecolor=np.random.rand(3),
+    #     )
+    #     for i in range(NUM)
+    # ]
 
-        # fig, ax = plt.subplots()
-        # ax.set(xlim=(0, 10), ylim=(0, 10), aspect="equal")
+    # fig, ax = plt.subplots()
+    # ax.set(xlim=(0, 10), ylim=(0, 10), aspect="equal")
 
-        # for e in ells:
-        #     ax.add_artist(e)
-        #     e.set_clip_box(ax.bbox)
+    # for e in ells:
+    #     ax.add_artist(e)
+    #     e.set_clip_box(ax.bbox)
 
-        # plt.show()
+    # plt.show()
     obj = Station(
         orientation="FS",
         name="Rounded Rectangle",
@@ -171,6 +170,13 @@ if __name__ == "__main__":  # pragma: no cover
         width=60.0,
         depth=60.0,
         vertical_centroid=60.0,
-        radius=25,
+        radius=20,
     )
-    obj.show()
+    angles = np.radians([-15, 5, 15, 35, 50, 65, 80])
+    coords = []
+    for theta in angles:
+        print(f"Angle = {theta:.2f}")
+        x, y = obj.get_coords(theta)
+        coords.append((x, y))
+
+    obj.show(coords)
