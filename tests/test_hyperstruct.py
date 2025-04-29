@@ -117,65 +117,28 @@ def test_oval_2(oval_wide: Station) -> None:
 
 def test_rounded(rounded: Station) -> None:
     """Test a Rounded station."""
-    upper = rounded.upper_panel
-    lower = rounded.lower_panel
-    side = rounded.side_panel
-    arc = rounded.arc_length(0.0, np.pi / 4)
+    x, y = rounded.get_coords(np.pi / 2)
 
     pycheck.is_false(rounded.is_ellipse)
 
-    # pycheck.almost_equal(upper, -31.7, abs=0.1)
-    # pycheck.almost_equal(lower, 31.7, abs=0.1)
-    # pycheck.almost_equal(side, -44.1, abs=0.1)
-
-    # pycheck.almost_equal(arc, 22.0, abs=0.1)
+    pycheck.almost_equal(x, 30, abs=0.1)
+    pycheck.almost_equal(y, 60, abs=0.1)
 
 
 if __name__ == "__main__":  # pragma: no cover
-    # This is sample code from the Matplotlib Ellipse example.
-    # Playground stuff to learn how to plot these shapes.
-    # import matplotlib.pyplot as plt
-    # import numpy as np
-    # from matplotlib.patches import Ellipse
-
-    # # Fixing random state for reproducibility
-    # np.random.seed(19680801)
-
-    # NUM = 10
-
-    # ells = [
-    #     Ellipse(
-    #         xy=np.random.rand(2) * 10,
-    #         width=np.random.rand(),
-    #         height=np.random.rand(),
-    #         angle=np.random.rand() * 360,
-    #         fill=False,
-    #         edgecolor=np.random.rand(3),
-    #     )
-    #     for i in range(NUM)
-    # ]
-
-    # fig, ax = plt.subplots()
-    # ax.set(xlim=(0, 10), ylim=(0, 10), aspect="equal")
-
-    # for e in ells:
-    #     ax.add_artist(e)
-    #     e.set_clip_box(ax.bbox)
-
-    # plt.show()
+    # This snippet just verifies the show method and get_coords.
     obj = Station(
         orientation="FS",
         name="Rounded Rectangle",
         number=400.0,
-        width=60.0,
+        width=80.0,
         depth=60.0,
         vertical_centroid=60.0,
-        radius=20,
+        radius=27,
     )
-    angles = np.radians([-15, 5, 15, 35, 50, 65, 80])
+    angles = np.linspace(0, np.pi, num=10)
     coords = []
     for theta in angles:
-        print(f"Angle = {theta:.2f}")
         x, y = obj.get_coords(theta)
         coords.append((x, y))
 

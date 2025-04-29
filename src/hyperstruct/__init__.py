@@ -308,6 +308,18 @@ class Station:
             linestyle="none",
         )
 
+        for x, y in zip(center_x, center_y, strict=True):
+            _ = ax.add_artist(
+                Circle(
+                    (x, y),
+                    radius=self.radius,
+                    fill=False,
+                    edgecolor="black",
+                    linestyle=(0, (10, 14)),
+                    linewidth=0.35,
+                )
+            )
+
         if coords:
             for x, y in coords:
                 ax.plot(
@@ -320,7 +332,181 @@ class Station:
                 )
         plt.show()
 
-    def get_coords(self, theta: float) -> Tuple[float]:
+    def corner_intersection(
+        self,
+        theta: float,
+        phi_1: float,
+        phi_2: float,
+        phi_3: float,
+        phi_4: float,
+        phi_5: float,
+        phi_6: float,
+        phi_7: float,
+        phi_8: float,
+        debug: bool = False,
+    ):
+        """Just the corners.
+
+        Args:
+            theta: Angle of cut
+            phi_1: Upper RH corner start
+            phi_2: Upper RH corner end
+            phi_3: Lower RH corner start
+            phi_4: Lower RH corner end
+            phi_5: Lower LH corner start
+            phi_6: Lower LH corner end
+            phi_7: Upper LH corner start
+            phi_8: Upper LH corner end
+            debug: print debug information
+        """
+        # Intersection is on corner
+        # Set the equation for the line and the corner circle equal to each other
+        # Slope of line, y-intercept is zero; y = mx + vertical_centroid
+        if debug:
+            print("Corner Intersection")
+        m = np.cos(theta) / np.sin(theta)
+
+        # The specific corner designates the circle offsets
+        if theta < phi_3:
+            # We're in the Upper RH
+            if debug:
+                print("Upper RH")
+            p = self.wo
+            q = self.vertical_centroid + self.doo
+        elif theta < phi_5:
+            # We're in the Lower RH
+            if debug:
+                print("Lower RH")
+            p = self.wo
+            q = self.vertical_centroid - self.doo
+        elif theta < phi_7:
+            # We're in the Lower LH
+            if debug:
+                print("Lower LH")
+            p = -self.wo
+            q = self.vertical_centroid - self.doo
+        else:
+            # We're in the Upper LH
+            if debug:
+                print("Upper LH")
+            p = -self.wo
+            q = self.vertical_centroid + self.doo
+
+        x_1, x_2, y_1, y_2 = self.quadratic_sol(m, q, p)
+
+        return (x_1, x_2, y_1, y_2)
+
+    def quadratic_sol(self, m: float, q: float, p: float) -> Tuple[float]:
+        """Breaking out the quadratic formula solution."""
+        # Plugging the linear equation into the circle equation and
+        # solving for the dependent variable
+        a = m**2 + 1
+        b = 2 * (m * self.vertical_centroid - m * q - p)
+        c = (
+            q**2
+            - self.radius**2
+            + p**2
+            - 2 * self.vertical_centroid * q
+            + self.vertical_centroid**2
+        )
+        if b**2 - 4 * a * c < 0:
+            # print(f"x={xx:.1f}, y={yy:.1f}")
+            # print(f"theta={np.degrees(theta):.0f}deg, m={m:.1f}, does not intersect.")
+            raise ValueError("Line does not intersect with shape!")
+
+        x_1 = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        x_2 = (-b - np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        y_1 = m * x_1 + self.vertical_centroid
+        y_2 = m * x_2 + self.vertical_centroid
+
+        return (x_1, x_2, y_1, y_2)
+
+    def rect_corner(self, theta: float, debug: bool = False) -> Tuple[float]:
+        """This method breaks out all the rounded rectangle stuff corner stuff from get_coords.
+
+        Args:
+            theta:  polar angle to calculate the intersection with. This must be in radians.
+                    Note that the angle is measured clockwise from the vertical axis (12 o'clock)
+            debug:  bool to print debugging information
+
+        Returns:
+            Tuple of coordinates as floats, for example (x, y)
+
+        Raises:
+            ValueError: If the corner intersection cannot be found.
+                        This means there's a problem with the code, or the given shape.
+        """
+        # Rounded rectangle
+        # Start with the inscribed circle xy
+        r = self.depth / 2
+        xx = r * np.sin(theta)
+        yy = r * np.cos(theta) + self.vertical_centroid
+
+        if debug:
+            print(f"xx={xx:.1f}, yy={yy:.1f}")
+
+        # Corner points to polar angles
+        d = self.depth / 2
+        w = self.width / 2
+
+        phi_1 = np.arctan(self.wo / d)
+        phi_2 = np.arctan(w / self.doo)
+        phi_3 = np.arctan(self.doo / w) + np.pi / 2
+        phi_4 = np.arctan(d / self.wo) + np.pi / 2
+        phi_5 = np.arctan(d / self.wo) + np.pi
+        phi_6 = 3 * np.pi / 2 - np.arctan(self.doo / w)
+        phi_7 = 3 * np.pi / 2 + np.arctan(self.doo / w)
+        phi_8 = 3 * np.pi / 2 + np.arctan(d / self.wo)
+
+        # Stupid complex switch case
+        if (theta < phi_1) or (theta > phi_8):
+            # Intersection is on upper horizontal portion
+            x = r * np.tan(theta)
+            y = r + self.vertical_centroid
+            if debug:
+                print(f"Upper Horizontal Intersection; x={x:.1f}, y={y:.1f}")
+        elif (theta > phi_4) and (theta < phi_5):
+            # Intersection is on lower horizontal portion
+            x = -r * np.tan(theta)
+            y = -r + self.vertical_centroid
+            if debug:
+                print(f"Lower Horizontal Intersection; x={x:.1f}, y={y:.1f}")
+        elif (theta > phi_2) and (theta < phi_3):
+            # Intersection is on RH vertical portion
+            # Use a triangle instead of a circle
+            x = w
+            y = w * np.cos(theta) + self.vertical_centroid
+            if debug:
+                print(f"RH Vertical Intersection; x={x:.1f}, y={y:.1f}")
+        elif (theta > phi_6) and (theta < phi_7):
+            # Intersection is on LH vertical portion
+            # Use a triangle instead of a circle
+            x = -w
+            y = w * np.cos(theta) + self.vertical_centroid
+            if debug:
+                print(f"LH Vertical Intersection; x={x:.1f}, y={y:.1f}")
+        else:
+            x_1, x_2, y_1, y_2 = self.corner_intersection(
+                theta, phi_1, phi_2, phi_3, phi_4, phi_5, phi_6, phi_7, phi_8, debug
+            )
+
+            if debug:
+                print(f"    x_1 = {x_1:.2f}")
+                print(f"    x_2 = {x_2:.2f}")
+                print(f"    y_1 = {y_1:.2f}")
+                print(f"    y_2 = {y_2:.2f}")
+            if abs(x_1) >= self.wo:
+                x = x_1
+                y = y_1
+            elif abs(x_2) >= self.wo:
+                x = x_2
+                y = y_2
+            else:
+                raise ValueError("Could not find an intersection in the corner!")
+
+        return float(x), float(y)
+
+    def get_coords(self, theta: float, debug: bool = False) -> Tuple[float]:
         """Get the planar coordinates of the shape intersection with a straight line at angle theta.
 
         Coordinate extraction varies from the simplistic (Circle), to the very complext case of the
@@ -330,13 +516,10 @@ class Station:
         Args:
             theta:  polar angle to calculate the intersection with. This must be in radians.
                     Note that the angle is measured clockwise from the vertical axis (12 o'clock)
+            debug:  bool to print debugging information
 
         Returns:
             Tuple of coordinates as floats, for example (x, y)
-
-        Raises:
-            ValueError: If the corner intersection cannot be found.
-                        This means there's a problem with the code, or the given shape.
         """
         if self.is_ellipse:
             # Calculate the eccentricity
@@ -350,64 +533,7 @@ class Station:
             x = r * np.sin(theta)
             y = r * np.cos(theta) + self.vertical_centroid
         elif self.radius < self.width / 2:
-            # Rounded rectangle
-            # Start with the inscribed circle xy
-            r = self.depth / 2
-            xx = r * np.sin(theta)
-            yy = r * np.cos(theta)
-            if abs(xx) <= self.wo:
-                # Intersection is on horizontal portion
-                # Use a triangle instead of circle
-                x = r * np.tan(theta)
-                y = np.sign(yy) * r + self.vertical_centroid
-            elif abs(yy) <= self.doo:
-                # Intersection is on vertical portion
-                # Use a triangle instead of a circle
-                x = np.sign(xx) * self.width / 2
-                y = 0.5 * self.width * np.tan(theta) + self.vertical_centroid
-            else:
-                # Intersection is on corner
-                # Set the equation for the line and the corner circle equal to each other
-                # Slope of line, y-intercept is zero; y = mx+ 0
-                rise = self.depth / 2
-                run = rise * np.tan(theta)
-                m = rise / run
-
-                # Plugging the linear equation into the circle equation and
-                # solving for the dependent variable
-                a = m**2 + 1
-                b = -2 * (self.wo + m * self.doo)
-                c = self.wo**2 + self.doo**2 - self.radius**2
-                x_1 = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
-                x_2 = (-b - np.sqrt(b**2 - 4 * a * c)) / (2 * a)
-                y_1 = m * x_1
-                y_2 = m * x_2
-                # Angles are measured CW from the vertical axis
-                theta_1 = np.arctan(x_1 / y_1)
-                theta_2 = np.arctan(x_2 / y_2)
-
-                corner_start = np.arctan(self.wo / (0.5 * self.depth))
-                corner_end = np.arctan((0.5 * self.width) / self.doo)
-
-                print(f"    m = {m:.2f}")
-                print(f"    x_1 = {x_1:.2f}")
-                print(f"    x_2 = {x_2:.2f}")
-                print(f"    y_1 = {y_1:.2f}")
-                print(f"    y_2 = {y_2:.2f}")
-                print(f"    theta_1 = {theta_1:.2f}")
-                print(f"    theta_2 = {theta_2:.2f}")
-                print(f"    start = {corner_start:.2f}")
-                print(f"    end = {corner_end:.2f}")
-                if (theta_1 >= corner_start) and (theta_1 <= corner_end):
-                    x = x_1
-                    y = y_1 + self.vertical_centroid
-                    print("Theta_1 intersects.")
-                elif (theta_2 >= corner_start) and (theta_2 <= corner_end):
-                    x = x_2
-                    y = y_2 + self.vertical_centroid
-                    print("Theta_2 intersects.")
-                else:
-                    raise ValueError("Could not find an intersection in the corner!")
+            x, y = self.rect_corner(theta, debug)
         else:
             # It's a circle
             r = self.radius
