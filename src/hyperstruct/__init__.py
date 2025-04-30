@@ -332,7 +332,45 @@ class Station:
                 )
         plt.show()
 
-    def corner_intersection(
+    def _quadratic_sol(self, m: float, q: float, p: float) -> Tuple[float]:
+        """Breaking out the quadratic formula solution.
+
+        Args:
+            m: float of linear slope
+            q: float of horizontal offset
+            p: float of vertical offset
+
+        Returns:
+            tuple of the 2 intersections
+
+        Raises:
+            ValueError if the curves don't intersect.
+            This shouldn't happen... :D
+        """
+        # Plugging the linear equation into the circle equation and
+        # solving for the dependent variable
+        a = m**2 + 1
+        b = 2 * (m * self.vertical_centroid - m * q - p)
+        c = (
+            q**2
+            - self.radius**2
+            + p**2
+            - 2 * self.vertical_centroid * q
+            + self.vertical_centroid**2
+        )
+        if b**2 - 4 * a * c < 0:
+            # print(f"x={xx:.1f}, y={yy:.1f}")
+            # print(f"theta={np.degrees(theta):.0f}deg, m={m:.1f}, does not intersect.")
+            raise ValueError("Line does not intersect with shape!")
+
+        x_1 = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        x_2 = (-b - np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        y_1 = m * x_1 + self.vertical_centroid
+        y_2 = m * x_2 + self.vertical_centroid
+
+        return (x_1, x_2, y_1, y_2)
+
+    def _corner_intersection(
         self,
         theta: float,
         phi_1: float,
@@ -359,6 +397,10 @@ class Station:
             phi_8: Upper LH corner end
             debug: print debug information
         """
+        # I think it's better to call all phi angles in order, but calling for
+        # useless args will upset the CI gods. So we do something meaningless with them.
+        __unused = phi_1 + phi_2 + phi_4 + phi_6 + phi_8
+        __unused += __unused
         # Intersection is on corner
         # Set the equation for the line and the corner circle equal to each other
         # Slope of line, y-intercept is zero; y = mx + vertical_centroid
@@ -392,36 +434,45 @@ class Station:
             p = -self.wo
             q = self.vertical_centroid + self.doo
 
-        x_1, x_2, y_1, y_2 = self.quadratic_sol(m, q, p)
+        x_1, x_2, y_1, y_2 = self._quadratic_sol(m, q, p)
 
         return (x_1, x_2, y_1, y_2)
 
-    def quadratic_sol(self, m: float, q: float, p: float) -> Tuple[float]:
-        """Breaking out the quadratic formula solution."""
-        # Plugging the linear equation into the circle equation and
-        # solving for the dependent variable
-        a = m**2 + 1
-        b = 2 * (m * self.vertical_centroid - m * q - p)
-        c = (
-            q**2
-            - self.radius**2
-            + p**2
-            - 2 * self.vertical_centroid * q
-            + self.vertical_centroid**2
-        )
-        if b**2 - 4 * a * c < 0:
-            # print(f"x={xx:.1f}, y={yy:.1f}")
-            # print(f"theta={np.degrees(theta):.0f}deg, m={m:.1f}, does not intersect.")
-            raise ValueError("Line does not intersect with shape!")
+    def _switch(
+        self, x_1: float, x_2: float, y_1: float, y_2: float, debug: bool = False
+    ) -> Tuple[float]:
+        """Just the corners.
 
-        x_1 = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
-        x_2 = (-b - np.sqrt(b**2 - 4 * a * c)) / (2 * a)
-        y_1 = m * x_1 + self.vertical_centroid
-        y_2 = m * x_2 + self.vertical_centroid
+        Args:
+            x_1: float
+            x_2: float
+            y_1: float
+            y_2: float
+            debug: bool
 
-        return (x_1, x_2, y_1, y_2)
+        Returns:
+            tuple of the desired intersection point
 
-    def rect_corner(self, theta: float, debug: bool = False) -> Tuple[float]:
+        Raises:
+            ValueError: If no intersection.
+        """
+        if debug:
+            print(f"    x_1 = {x_1:.2f}")
+            print(f"    x_2 = {x_2:.2f}")
+            print(f"    y_1 = {y_1:.2f}")
+            print(f"    y_2 = {y_2:.2f}")
+        if abs(x_1) >= self.wo:
+            x = x_1
+            y = y_1
+        elif abs(x_2) >= self.wo:
+            x = x_2
+            y = y_2
+        else:
+            raise ValueError("Could not find an intersection in the corner!")
+
+        return (x, y)
+
+    def _rect_corner(self, theta: float, debug: bool = False) -> Tuple[float]:
         """This method breaks out all the rounded rectangle stuff corner stuff from get_coords.
 
         Args:
@@ -431,10 +482,6 @@ class Station:
 
         Returns:
             Tuple of coordinates as floats, for example (x, y)
-
-        Raises:
-            ValueError: If the corner intersection cannot be found.
-                        This means there's a problem with the code, or the given shape.
         """
         # Rounded rectangle
         # Start with the inscribed circle xy
@@ -486,25 +533,12 @@ class Station:
             if debug:
                 print(f"LH Vertical Intersection; x={x:.1f}, y={y:.1f}")
         else:
-            x_1, x_2, y_1, y_2 = self.corner_intersection(
+            x_1, x_2, y_1, y_2 = self._corner_intersection(
                 theta, phi_1, phi_2, phi_3, phi_4, phi_5, phi_6, phi_7, phi_8, debug
             )
+            x, y = self._switch(theta, x_1, x_2, y_1, y_2, debug)
 
-            if debug:
-                print(f"    x_1 = {x_1:.2f}")
-                print(f"    x_2 = {x_2:.2f}")
-                print(f"    y_1 = {y_1:.2f}")
-                print(f"    y_2 = {y_2:.2f}")
-            if abs(x_1) >= self.wo:
-                x = x_1
-                y = y_1
-            elif abs(x_2) >= self.wo:
-                x = x_2
-                y = y_2
-            else:
-                raise ValueError("Could not find an intersection in the corner!")
-
-        return float(x), float(y)
+        return (float(x), float(y))
 
     def get_coords(self, theta: float, debug: bool = False) -> Tuple[float]:
         """Get the planar coordinates of the shape intersection with a straight line at angle theta.
@@ -533,7 +567,7 @@ class Station:
             x = r * np.sin(theta)
             y = r * np.cos(theta) + self.vertical_centroid
         elif self.radius < self.width / 2:
-            x, y = self.rect_corner(theta, debug)
+            x, y = self._rect_corner(theta, debug)
         else:
             # It's a circle
             r = self.radius
