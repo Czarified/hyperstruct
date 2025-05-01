@@ -347,8 +347,7 @@ class Station:
             tuple of the 2 intersections
 
         Raises:
-            ValueError: if the curves don't intersect.
-            This shouldn't happen... :D
+            ValueError: if the curves don't intersect
         """
         # Plugging the linear equation into the circle equation and
         # solving for the dependent variable

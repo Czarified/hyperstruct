@@ -1407,6 +1407,7 @@ class MajorFrame(Component):
             horizontal += v[1]
             # TODO: Torque
             # torque += v[2] + v[0] * y + v[1] * (z - zzf)
+            torque += v[2] + v[0] * y + v[1] * z
 
         # Calculate internal frame loads
         self.internal_loads()
