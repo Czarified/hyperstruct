@@ -272,7 +272,7 @@ class Station:
             )
         elif self.radius < self.width / 2:
             xy = (-self.width / 2, self.vertical_centroid - self.depth / 2)
-            style = f"Round, pad=0.2, rounding_size={self.radius}"
+            style = f"Round, pad=0.0, rounding_size={self.radius}"
             obj = FancyBboxPatch(
                 xy=xy,
                 width=self.width,
