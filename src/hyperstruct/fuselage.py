@@ -1442,7 +1442,7 @@ class MajorFrame(Component):
         """
         # Bending
         # ben = bmo + v_0 * ypb + h_0 * (zpb - zzf) + 0.5 * (moment_i + moment_i1)
-        pass
+        return None
 
     def sizing(
         self, vv: float, aa: float, ben: float, dlsp: float, fd: float, k: float = 0.9

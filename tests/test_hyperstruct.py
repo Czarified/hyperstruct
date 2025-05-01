@@ -73,6 +73,7 @@ def test_circle(circle: Station) -> None:
     lower = circle.lower_panel
     side = circle.side_panel
     arc = circle.arc_length(0.0, np.pi / 4)
+    x, y = circle.get_coords(np.pi / 2)
 
     pycheck.is_false(circle.is_ellipse)
 
@@ -82,6 +83,9 @@ def test_circle(circle: Station) -> None:
 
     pycheck.almost_equal(arc, 23.56, abs=0.1)
 
+    pycheck.almost_equal(x, 30, abs=0.1)
+    pycheck.almost_equal(y, 60, abs=0.1)
+
 
 def test_oval_1(oval_deep: Station) -> None:
     """Test an Oval station."""
@@ -89,6 +93,7 @@ def test_oval_1(oval_deep: Station) -> None:
     lower = oval_deep.lower_panel
     side = oval_deep.side_panel
     arc = oval_deep.arc_length(0.0, np.pi / 4)
+    x, y = oval_deep.get_coords(np.pi / 2)
 
     pycheck.is_true(oval_deep.is_ellipse)
 
@@ -98,6 +103,9 @@ def test_oval_1(oval_deep: Station) -> None:
 
     pycheck.almost_equal(arc, 22.0, abs=0.1)
 
+    pycheck.almost_equal(x, 51.4, abs=0.1)
+    pycheck.almost_equal(y, 60, abs=0.1)
+
 
 def test_oval_2(oval_wide: Station) -> None:
     """Test an Oval station."""
@@ -105,6 +113,7 @@ def test_oval_2(oval_wide: Station) -> None:
     lower = oval_wide.lower_panel
     side = oval_wide.side_panel
     arc = oval_wide.arc_length(0.0, np.pi / 4)
+    x, y = oval_wide.get_coords(np.pi / 2)
 
     pycheck.is_true(oval_wide.is_ellipse)
 
@@ -113,6 +122,9 @@ def test_oval_2(oval_wide: Station) -> None:
     pycheck.almost_equal(side, -44.1, abs=0.1)
 
     pycheck.almost_equal(arc, 22.0, abs=0.1)
+
+    pycheck.almost_equal(x, 30, abs=0.1)
+    pycheck.almost_equal(y, 60, abs=0.1)
 
 
 def test_rounded(rounded: Station) -> None:
@@ -131,10 +143,10 @@ if __name__ == "__main__":  # pragma: no cover
         orientation="FS",
         name="Rounded Rectangle",
         number=400.0,
-        width=80.0,
-        depth=60.0,
-        vertical_centroid=60.0,
-        radius=27,
+        width=40.0,
+        depth=15.0,
+        vertical_centroid=40.0,
+        radius=500,
     )
     angles = np.linspace(0, np.pi, num=10)
     coords = []

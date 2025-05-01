@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from importlib.metadata import version
 from typing import List
+from typing import Optional
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -246,7 +247,7 @@ class Station:
         else:
             raise NotImplementedError
 
-    def show(self, coords: List[float] = None) -> None:
+    def show(self, coords: Optional[List[Tuple[float, float]]] = None) -> None:
         """Plot the station shape for a visual check.
 
         This method just uses matplotlib to draw the shape on a plot.
@@ -332,7 +333,9 @@ class Station:
                 )
         plt.show()
 
-    def _quadratic_sol(self, m: float, q: float, p: float) -> Tuple[float]:
+    def _quadratic_sol(
+        self, m: float, q: float, p: float
+    ) -> Tuple[float, float, float, float]:
         """Breaking out the quadratic formula solution.
 
         Args:
@@ -344,7 +347,7 @@ class Station:
             tuple of the 2 intersections
 
         Raises:
-            ValueError if the curves don't intersect.
+            ValueError: if the curves don't intersect.
             This shouldn't happen... :D
         """
         # Plugging the linear equation into the circle equation and
@@ -382,7 +385,7 @@ class Station:
         phi_7: float,
         phi_8: float,
         debug: bool = False,
-    ):
+    ) -> Tuple[float, float, float, float]:
         """Just the corners.
 
         Args:
@@ -396,6 +399,9 @@ class Station:
             phi_7: Upper LH corner start
             phi_8: Upper LH corner end
             debug: print debug information
+
+        Returns:
+            tuple of the 2 intersections
         """
         # I think it's better to call all phi angles in order, but calling for
         # useless args will upset the CI gods. So we do something meaningless with them.
@@ -440,7 +446,7 @@ class Station:
 
     def _switch(
         self, x_1: float, x_2: float, y_1: float, y_2: float, debug: bool = False
-    ) -> Tuple[float]:
+    ) -> Tuple[float, float]:
         """Just the corners.
 
         Args:
@@ -472,7 +478,7 @@ class Station:
 
         return (x, y)
 
-    def _rect_corner(self, theta: float, debug: bool = False) -> Tuple[float]:
+    def _rect_corner(self, theta: float, debug: bool = False) -> Tuple[float, float]:
         """This method breaks out all the rounded rectangle stuff corner stuff from get_coords.
 
         Args:
@@ -536,11 +542,11 @@ class Station:
             x_1, x_2, y_1, y_2 = self._corner_intersection(
                 theta, phi_1, phi_2, phi_3, phi_4, phi_5, phi_6, phi_7, phi_8, debug
             )
-            x, y = self._switch(theta, x_1, x_2, y_1, y_2, debug)
+            x, y = self._switch(x_1, x_2, y_1, y_2, debug)
 
         return (float(x), float(y))
 
-    def get_coords(self, theta: float, debug: bool = False) -> Tuple[float]:
+    def get_coords(self, theta: float, debug: bool = False) -> Tuple[float, float]:
         """Get the planar coordinates of the shape intersection with a straight line at angle theta.
 
         Coordinate extraction varies from the simplistic (Circle), to the very complext case of the
@@ -559,7 +565,9 @@ class Station:
             # Calculate the eccentricity
             a = self.width / 2
             b = self.depth / 2
-            e = np.sqrt(1 - (b / a) ** 2)
+            major = max(a, b)
+            minor = min(a, b)
+            e = np.sqrt(1 - (minor / major) ** 2)
             alpha = np.pi / 2 - theta
             # Vector length to curve intersection point
             r = b / np.sqrt(1 - (e * np.cos(alpha)) ** 2)
