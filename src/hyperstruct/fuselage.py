@@ -10,9 +10,9 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Tuple
-from numpy.typing import ArrayLike
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.optimize import minimize_scalar
 
 from hyperstruct import Component
@@ -1519,7 +1519,7 @@ class MajorFrame(Component):
         return None
 
     def sizing(
-        self, vv: float, aa: float, ben: float, dlsp: float, fd: float, k: float = 0.9
+        self, vv: float, aa: float, ben: float, dlsp: float, k: float = 0.9
     ) -> float:
         """Sizing approach for a segment. [SFOAWE].
 
@@ -1543,7 +1543,7 @@ class MajorFrame(Component):
         """
         # Area required from bending strength
         # Criteria: No Yield at Limit
-        fa = abs(ben / fd) + abs(aa / 2)
+        fa = abs(ben / self.fd) + abs(aa / 2)
         cap_area_bend = fa / (k * self.material.F_cy)
 
         # Area required from flange crippling
@@ -1567,12 +1567,12 @@ class MajorFrame(Component):
 
         # Web thickness based on shear strength
         k_s = 7.5
-        t_w_str = abs(vv) / (fd * self.material.F_su)
+        t_w_str = abs(vv) / (self.fd * self.material.F_su)
 
         # Web thickness based on shear resistance
         t_w_res = (
             abs(vv)
-            * fd
+            * self.fd
             * 12
             * (1 - self.material.nu**2)
             / (k_s * np.pi**2 * self.material.E)
@@ -1584,7 +1584,7 @@ class MajorFrame(Component):
         # The 5 thal is for stiffener thickness
         # Assumption is taking section cuts where 1 stiffener per segment.
         # When you stack them all together, each segment will be "bounded" by stiffeners
-        volume = (bb_2 * (t_w + 0.005)) + (2 * bb_2 * tcap) + (fd * t_w)
+        volume = (bb_2 * (t_w + 0.005)) + (2 * bb_2 * tcap) + (self.fd * t_w)
         weight = self.material.rho * dlsp * volume
 
         return float(weight)
