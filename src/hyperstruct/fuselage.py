@@ -10,6 +10,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Tuple
+from numpy.typing import ArrayLike
 
 import numpy as np
 from scipy.optimize import minimize_scalar
@@ -1386,6 +1387,9 @@ class MajorFrame(Component):
     would be the Outer Mold Line (OML) of the MajorFrame.
     """
 
+    fd: float
+    """Frame depth, constant around periphery."""
+
     def synthesis(self, num: int = 60) -> None:
         """Controls the frame weight estimating process. [FFRME].
 
@@ -1415,26 +1419,95 @@ class MajorFrame(Component):
         # Final structural synthesis
         self.sizing()
 
-    def geometry_cuts(self, num: int) -> None:
-        """Calculate the frame node coordinates for all synthesis cuts.
+    def geometry_cuts(self, num: int) -> Tuple[float, ArrayLike, ArrayLike]:
+        """Calculate the frame node coordinates for all synthesis cuts. [FRMND1].
 
-        Should the frame occur in the first shell synthesis segment, the geometric
-        definition at the first shell synthesis cut is used for that frame. The
-        geometry of all other frames is determined by interpolating between the
-        bounding shell synthesis cuts. The frame synthesis cut coordinates are based
-        on equal-length segments along the xternal contour of that frame. The first
-        cut is taken at top centerline, which also defines the coordinates of the last cut.
+        The frame synthesis cut coordinates are based on equal-length segments
+        along the external contour of that frame. The first cut is taken at top
+        centerline, which also defines the coordinates of the last cut.
+
+        Args:
+            num: Integer number of cuts to take
+
+        Returns:
+            (zzf, inertias, cut_geom): Elastic Center, Inertias array, and cut_geometry matrix
         """
-        # Initialize the cut dictionaries, so we can reference them later
-        cut_geom = {}
-        cut_loads = {}
-        for cut in range(num):
-            # Geometry collection
-            cut_geom[cut] = None
-            # Loads collection
-            cut_loads[cut] = None
+        perimeter = (
+            self.geom.upper_panel + 2 * self.geom.side_panel + self.geom.lower_panel
+        )
+        dls = perimeter / num
 
-    def internal_loads(self) -> Tuple[float]:
+        # Initialize the cut matrix
+        cut_geom = np.zeros(5, dtype=np.float32)
+
+        # Our first cut starts at the top dead center of the station
+        theta_i = 0.0
+        y_i, z_i = self.geom.get_coords(theta_i)
+
+        for _cut in range(num):
+
+            # We want all the cuts to be the same length, but we don't know the angle
+            # that achieves this. We can iterate by using an angle and checking the
+            # iteration step segment length.
+            # Initial dsl_k doesn't matter.
+            dsl_k = 0
+            # Guessing an initial angle that's close to our final will reduce
+            # total iterations. We could be smarter about our adjustments, but this
+            # will work either way.
+            theta_l = theta_i
+            theta_k = theta_i + np.pi / 64
+            # Being within +/-3% is close enough for me
+            while (dsl_k < 0.97 * dls) or (dsl_k > 1.03 * dls):
+                y_k, z_k = self.geom.get_coords(theta_k)
+                del_y = y_k - y_i
+                del_z = z_k - z_i
+                dsl_k = np.sqrt(del_y**2 + del_z**2)
+                if dsl_k > dls:
+                    theta_k -= (theta_k - theta_l) / 2
+                elif dsl_k < dls:
+                    theta_k += (theta_k - theta_l) / 2
+
+                theta_l = theta_k
+
+            # Calculate the shell midpoint
+            y_bj = np.average([y_i, y_k])
+            z_bj = np.average([z_i, z_k])
+
+            # Calculate the centroidal coordiantes of the segment
+            r_i = z_i / np.cos(theta_i)
+            r_p = r_i - self.fd / 2
+            # At beginning
+            y_p = r_p * np.sin(theta_i)
+            z_p = r_p * np.cos(theta_i)
+            # At end
+            y_pk = r_p * np.sin(theta_k)
+            z_pk = r_p * np.cos(theta_k)
+            # At the midpoint
+            y_pbj = np.average([y_p, y_pk])
+            z_pbj = np.average([z_p, z_pk])
+
+            # Length of the frame
+            dlsp_j = np.sqrt((y_pk - y_p) ** 2 + (z_pk - z_p) ** 2)
+
+            # Geometry collection
+            new_row = np.array([y_bj, z_bj, y_pbj, z_pbj, dlsp_j])
+            cut_geom = np.vstack((cut_geom, new_row))
+
+        # The elastic center
+        zzf = np.sum(cut_geom[:, 1]) * dls / perimeter
+        # Section second moment of areas
+        # Of the shell
+        ioz_s = np.sum(cut_geom[:, 0]) ** 2 * dls
+        ioy_s = (np.sum(cut_geom[:, 1]) - zzf) ** 2 * dls
+        # Of the frame
+        ioz_f = np.sum(cut_geom[:, 2]) ** 2 * dls
+        ioy_f = (np.sum(cut_geom[:, 3]) - zzf) ** 2 * np.sum(cut_geom[:, 4])
+
+        inertias = np.array([ioz_s, ioy_s, ioz_f, ioy_f])
+
+        return zzf, inertias, cut_geom
+
+    def internal_loads(self) -> None:
         """Calculates the internal loads at the midpoint of a segment. [FRMLD].
 
         For each component, the loads at the center is a function of the forces at
