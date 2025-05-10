@@ -5,6 +5,7 @@ The fuselage module operates as a stand-alone program or in conjuction with othe
 This file contains all global variables, classes, and functions related to fuselage weight synthesis.
 """
 
+from copy import copy
 from dataclasses import dataclass
 from typing import Any
 from typing import Dict
@@ -1370,11 +1371,17 @@ class MajorFrame(Component):
     fs_loc: float
     """Fuselage Station location (e.g. 150in from origin)."""
 
-    loads: Dict[List[float], List[float]]
+    loads: ArrayLike
     """The loads list contains all external loads applied on this frame.
+    [
+        [x, y, V, H, M],
+        ... ,
+        [...]
+    ]
 
-    Loads are provided as a dictionary. The keys are the y and z coordinates of
-    the concentrated loads (BL and WL). The values are, respectively, the vertical
+    Loads are provided as a matrix. Each row is a unique external load.
+    The first two columns are the y and z coordinates of the concentrated
+    loads (BL and WL). The last three columns are, respectively, the vertical
     force, horizontal force, and moment.
 
     Note: There is not strict control differentiating between coordinate or load vectors!
@@ -1419,18 +1426,23 @@ class MajorFrame(Component):
         # Final structural synthesis
         self.sizing()
 
-    def geometry_cuts(self, num: int) -> Tuple[float, ArrayLike, ArrayLike]:
+    def geometry_cuts(self, num: int = 16) -> Tuple[float, ArrayLike, ArrayLike]:
         """Calculate the frame node coordinates for all synthesis cuts. [FRMND1].
 
         The frame synthesis cut coordinates are based on equal-length segments
         along the external contour of that frame. The first cut is taken at top
         centerline, which also defines the coordinates of the last cut.
 
+        WARNING: This iteration routine goes unstable with larger numbers of cuts (>~22)!
+
         Args:
             num: Integer number of cuts to take
 
         Returns:
-            (zzf, inertias, cut_geom): Elastic Center, Inertias array, and cut_geometry matrix
+            zzf: Elastic Center
+            inertias: Inertias array
+            cut_geom: cut_geometry matrix, where each row is a segment and columns are
+                [OML midpoint y, OML midpoint z, Centroid y, Centroid z, Segment length]
         """
         perimeter = (
             self.geom.upper_panel + 2 * self.geom.side_panel + self.geom.lower_panel
@@ -1442,32 +1454,43 @@ class MajorFrame(Component):
 
         # Our first cut starts at the top dead center of the station
         theta_i = 0.0
-        y_i, z_i = self.geom.get_coords(theta_i)
 
+        print(f"dls = {dls:.3f}")
         for _cut in range(num):
-
+            # print(f"Cut {_cut:.0f}")
+            y_i, z_i = self.geom.get_coords(theta_i)
             # We want all the cuts to be the same length, but we don't know the angle
             # that achieves this. We can iterate by using an angle and checking the
             # iteration step segment length.
             # Initial dsl_k doesn't matter.
-            dsl_k = 0
+            dls_k = 0
             # Guessing an initial angle that's close to our final will reduce
             # total iterations. We could be smarter about our adjustments, but this
             # will work either way.
             theta_l = theta_i
-            theta_k = theta_i + np.pi / 64
+            theta_k = theta_i + np.pi / (num**3)
+            # This inner loop calculates how close the guess is, and updates
+            # the loop iterable proportionally to the proximity.
             # Being within +/-3% is close enough for me
-            while (dsl_k < 0.97 * dls) or (dsl_k > 1.03 * dls):
+            while (dls_k < 0.97 * dls) or (dls_k > 1.03 * dls):
                 y_k, z_k = self.geom.get_coords(theta_k)
                 del_y = y_k - y_i
                 del_z = z_k - z_i
-                dsl_k = np.sqrt(del_y**2 + del_z**2)
-                if dsl_k > dls:
-                    theta_k -= (theta_k - theta_l) / 2
-                elif dsl_k < dls:
-                    theta_k += (theta_k - theta_l) / 2
+                dls_k = np.sqrt(del_y**2 + del_z**2)
+                if dls_k > dls:
+                    # Halve it
+                    __diff = theta_k - theta_l
+                    theta_l = copy(theta_k)
+                    theta_k = theta_k - (__diff / 2)
+                elif dls_k < dls:
+                    # Double it
+                    __diff = theta_k - theta_l
+                    theta_l = copy(theta_k)
+                    theta_k = theta_k + __diff
 
-                theta_l = theta_k
+            # print(f"     dls_k = {dls_k:.3f}")
+            # print(f"     theta_i = {theta_i:.3f}")
+            # print(f"     theta_k = {theta_k:.3f}")
 
             # Calculate the shell midpoint
             y_bj = np.average([y_i, y_k])
@@ -1493,6 +1516,9 @@ class MajorFrame(Component):
             new_row = np.array([y_bj, z_bj, y_pbj, z_pbj, dlsp_j])
             cut_geom = np.vstack((cut_geom, new_row))
 
+            # Next cut start is this cut's end
+            theta_i = copy(theta_k)
+
         # The elastic center
         zzf = np.sum(cut_geom[:, 1]) * dls / perimeter
         # Section second moment of areas
@@ -1507,16 +1533,38 @@ class MajorFrame(Component):
 
         return zzf, inertias, cut_geom
 
-    def internal_loads(self) -> None:
+    def internal_loads(self, num: int = 30) -> None:
         """Calculates the internal loads at the midpoint of a segment. [FRMLD].
 
         For each component, the loads at the center is a function of the forces at
-        each end (i, and i1), as well as contributions from the frame total loads (_0)
+        each end (i, and i1), as well as contributions from the frame total loads
         at the fuselage centerline.
+
+        Args:
+            num: Number of cuts to pass on. (default 30)
         """
+        zzf, inertias, cut_geom = self.geometry_cuts()
+        total_v = np.sum(self.loads[:, 2])
+        total_h = np.sum(self.loads[:, 3])
+        total_m = (
+            np.sum(self.loads[:, 4])
+            - np.sum(self.loads[:, 1] * self.loads[:, 1])
+            - np.sum(self.loads[:, 2] * (self.loads[:, 1] - zzf))
+        )
+        dlsp = np.mean(cut_geom[:, 4])
+        pp = np.sum(cut_geom[:4])
+        da_j = np.abs(
+            (cut_geom[1:, 0] * cut_geom[:-1, 1]) / 2
+            - (cut_geom[:-1, 0] * cut_geom[1:, 1]) / 2
+        )
+        area = np.sum(da_j)
+
+        # Assuming ring flexibility is constant, the redundants are resolved
+        # to 3 independent equations
+        bmo = -np.sum(self.loads[:, 4] * dlsp) / (num * dlsp)
+
         # Bending
         # ben = bmo + v_0 * ypb + h_0 * (zpb - zzf) + 0.5 * (moment_i + moment_i1)
-        return None
 
     def sizing(
         self, vv: float, aa: float, ben: float, dlsp: float, k: float = 0.9

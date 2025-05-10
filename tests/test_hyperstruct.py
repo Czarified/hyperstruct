@@ -4,7 +4,9 @@ import numpy as np
 import pytest
 import pytest_check as pycheck
 
+from hyperstruct import Material
 from hyperstruct import Station
+from hyperstruct.fuselage import MajorFrame
 
 
 @pytest.fixture
@@ -143,15 +145,42 @@ if __name__ == "__main__":  # pragma: no cover
         orientation="FS",
         name="Rounded Rectangle",
         number=400.0,
-        width=40.0,
+        width=20.0,
         depth=15.0,
-        vertical_centroid=40.0,
-        radius=500,
+        vertical_centroid=25.0,
+        radius=5,
     )
-    angles = np.linspace(0, np.pi, num=10)
-    coords = []
-    for theta in angles:
-        x, y = obj.get_coords(theta)
-        coords.append((x, y))
+    # angles = np.linspace(0, np.pi, num=10)
+    # coords = []
+    # for theta in angles:
+    #     x, y = obj.get_coords(theta)
+    #     coords.append((x, y))
+    material = Material(
+        rho=0.1,
+        E=10.5e6,
+        E_c=10.6e6,
+        nu=0.33,
+        F_tu=64e3,
+        F_ty=42.1e3,
+        F_cy=48.3e3,
+        F_su=41.0e3,
+        F_bru=10.04e3,
+        F_bry=89.0e3,
+        F_en=20.0e3,
+        db_r=116,
+    )
+
+    frm = MajorFrame(
+        material=material,
+        fs_loc=400.0,
+        loads=np.array([[1.0, 1.0, 200.0, 0.0, 0.0]]),
+        geom=obj,
+        fd=4.2,
+    )
+    print(f"Upper Panel = {frm.geom.upper_panel}")
+    print(f" Side Panel = {frm.geom.side_panel}")
+    print(f"Lower Panel = {frm.geom.lower_panel}")
+    zzf, inertias, cuts = frm.geometry_cuts()
+    coords = [(row[0], row[1]) for row in cuts]
 
     obj.show(coords)
