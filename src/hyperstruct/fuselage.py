@@ -7,9 +7,10 @@ This file contains all global variables, classes, and functions related to fusel
 
 from copy import copy
 from dataclasses import dataclass
+
+# from typing import Dict
+# from typing import List
 from typing import Any
-from typing import Dict
-from typing import List
 from typing import Tuple
 
 import numpy as np
@@ -1569,6 +1570,12 @@ class MajorFrame(Component):
             inertias: Array of second moments of area
             y: Array of section cut y-coordinates
             z: Array of section cut z-coordinates
+            y_b: Array of segment OML y-coordinates
+            z_b: Array of segment OML z-coordinates
+            y_p: Array of section cut centroid y-coordinates
+            z_p: Array of section cut centroid z-coordinates
+            y_pb: Array of segment centroid y-coordinates
+            z_pb: Array of segment centroid z-coordinates
         """
         ioz_s, ioy_s, ioz_f, ioy_f = inertias
         total_v = np.sum(self.loads[:, 2])
@@ -1588,7 +1595,7 @@ class MajorFrame(Component):
             """Local function for the shear flow iteration."""
             qi_prime_1 = 0.0
             for n in range(2, i + 1):
-                qi_prime += total_v * dls * (z_b[n - 1] - zzf) / ioy_s
+                qi_prime_1 += total_v * dls * (z_b[n - 1] - zzf) / ioy_s
 
             qi_prime_2 = 0.0
             for n in range(2, i + 1):
