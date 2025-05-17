@@ -145,10 +145,10 @@ if __name__ == "__main__":  # pragma: no cover
         orientation="FS",
         name="Rounded Rectangle",
         number=400.0,
-        width=20.0,
+        width=15.0,
         depth=15.0,
         vertical_centroid=25.0,
-        radius=5,
+        radius=7,
     )
     # angles = np.linspace(0, np.pi, num=10)
     # coords = []

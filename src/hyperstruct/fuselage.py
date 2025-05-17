@@ -1374,7 +1374,7 @@ class MajorFrame(Component):
     loads: ArrayLike
     """The loads list contains all external loads applied on this frame.
     [
-        [x, y, V, H, M],
+        [y, z, V, H, M],
         ... ,
         [...]
     ]
@@ -1450,7 +1450,7 @@ class MajorFrame(Component):
         dls = perimeter / num
 
         # Initialize the cut matrix
-        cut_geom = np.zeros(5, dtype=np.float32)
+        cut_geom = np.zeros(10, dtype=np.float32)
 
         # Our first cut starts at the top dead center of the station
         theta_i = 0.0
@@ -1513,7 +1513,9 @@ class MajorFrame(Component):
             dlsp_j = np.sqrt((y_pk - y_p) ** 2 + (z_pk - z_p) ** 2)
 
             # Geometry collection
-            new_row = np.array([y_bj, z_bj, y_pbj, z_pbj, dlsp_j])
+            new_row = np.array(
+                [y_bj, z_bj, y_pbj, z_pbj, dlsp_j, y_i, z_i, y_p, z_p, theta_k]
+            )
             cut_geom = np.vstack((cut_geom, new_row))
 
             # Next cut start is this cut's end
@@ -1533,17 +1535,42 @@ class MajorFrame(Component):
 
         return zzf, inertias, cut_geom
 
-    def internal_loads(self, num: int = 30) -> None:
+    def internal_loads(
+        self,
+        i: int,
+        jj: int,
+        theta: float,
+        dls: float,
+        zzf: float,
+        dlsp_j: float,
+        inertias: ArrayLike,
+        y: ArrayLike,
+        z: ArrayLike,
+        y_b: ArrayLike,
+        z_b: ArrayLike,
+        y_p: ArrayLike,
+        z_p: ArrayLike,
+        y_pb: ArrayLike,
+        z_pb: ArrayLike,
+    ) -> None:
         """Calculates the internal loads at the midpoint of a segment. [FRMLD].
 
         For each component, the loads at the center is a function of the forces at
-        each end (i, and i1), as well as contributions from the frame total loads
+        each end (i, and i+1), as well as contributions from the frame total loads
         at the fuselage centerline.
 
         Args:
-            num: Number of cuts to pass on. (default 30)
+            i: Cut index number (integer)
+            jj: Total number of cuts
+            theta: Angle, in radians, of the section cut
+            dls: Segment length (float)
+            zzf: The Elastic Center (float)
+            dlsp_j: Segment centroidal length (float)
+            inertias: Array of second moments of area
+            y: Array of section cut y-coordinates
+            z: Array of section cut z-coordinates
         """
-        zzf, inertias, cut_geom = self.geometry_cuts()
+        ioz_s, ioy_s, ioz_f, ioy_f = inertias
         total_v = np.sum(self.loads[:, 2])
         total_h = np.sum(self.loads[:, 3])
         total_m = (
@@ -1551,19 +1578,91 @@ class MajorFrame(Component):
             - np.sum(self.loads[:, 1] * self.loads[:, 1])
             - np.sum(self.loads[:, 2] * (self.loads[:, 1] - zzf))
         )
-        dlsp = np.mean(cut_geom[:, 4])
-        pp = np.sum(cut_geom[:4])
-        da_j = np.abs(
-            (cut_geom[1:, 0] * cut_geom[:-1, 1]) / 2
-            - (cut_geom[:-1, 0] * cut_geom[1:, 1]) / 2
-        )
+        dlsp = np.mean(dlsp_j)
+        pp = np.sum(dlsp_j)
+        da_j = np.abs((np.roll(y, 1) * z / 2) - (y * np.roll(z, 1) / 2))
         area = np.sum(da_j)
 
-        # Assuming ring flexibility is constant, the redundants are resolved
-        # to 3 independent equations
-        bmo = -np.sum(self.loads[:, 4] * dlsp) / (num * dlsp)
+        # The shear flow the cut due to the unbalanced forces is:
+        def __local_shear_flow(i) -> float:
+            """Local function for the shear flow iteration."""
+            qi_prime_1 = 0.0
+            for n in range(2, i + 1):
+                qi_prime += total_v * dls * (z_b[n - 1] - zzf) / ioy_s
 
-        # Bending
+            qi_prime_2 = 0.0
+            for n in range(2, i + 1):
+                qi_prime_2 += total_h * dls * y_b[n - 1] / ioz_s
+
+            qi_prime = qi_prime_1 - qi_prime_2
+
+            return qi_prime
+
+        vec_qi_prime = []
+        for _i in range(1, jj + 1):
+            vec_qi_prime.append(__local_shear_flow(_i))
+
+        # The torque unbalance is needed to correct the shear flow
+        t_prime = 0.0
+
+        for _i in range(1, jj + 1):
+            t_prime += (vec_qi_prime[i] + vec_qi_prime[i + 1]) / 2 * (
+                y[i + 1] - y[i]
+            ) * (z_b[i]) - (z[i + 1] - z[i]) * y_b[i]
+
+        # Corrected shear flow for the cut
+        vec_qi = vec_qi_prime - (total_m + t_prime) / (2 * area)
+
+        # Static moment at a cut
+        moment_i = 0.0
+        for n in range(2, i + 1):
+            # All contributions from the balances shear flow
+            moment_i += ((vec_qi[n] + vec_qi[n - 1]) / 2) * (
+                (z[n] - z[n - 1]) * (y_p[i] - y_b[n - 1])
+                - (y[n] - y[n - 1]) * (z_p[i] - z_b[n - 1])
+            )
+
+        # We need to collect all the relevant external loads.
+        ext_loads = copy(self.loads)
+        # Calculate the angles
+        ext_loads = np.hstack(np.arctan(ext_loads[:, 1] / ext_loads[:, 0]))
+        # Then filter out all the loads that happen "after" the current section cut.
+        mask = ext_loads[:, 5] <= theta
+        ext_loads = ext_loads[mask, :]
+        # Add in each contribution to the total moment.
+        for row in ext_loads:
+            # Each row in the loads matrix is all data for a single point load/moment.
+            #    0        1      2  3  4   5
+            # [y_coord, z_coord, V, H, M, theta]
+            moment_i += (
+                -row[4] + row[2] * (y_p[i] - row[0]) + row[3] * (z_p[i] - row[1])
+            )
+
+        # Static vertical force at the cut is:
+        vertical_i = 0.0
+        for n in range(2, i + 1):
+            # Shear flow contribution
+            vertical_i = ((vec_qi[n] + vec_qi[n - 1]) / 2) * (z[n] - z[n - 1])
+        # Total external contribution
+        vertical_i += np.sum(ext_loads[:, 2])
+
+        # Static horizontal force at the cut is:
+        horizontal_i = 0.0
+        for n in range(2, i + 1):
+            # Shear flow contribution
+            horizontal_i -= ((vec_qi[n] + vec_qi[n - 1]) / 2) * (y[n] - y[n - 1])
+        # Total external contribution
+        horizontal_i += np.sum(ext_loads[:, 3])
+
+        # Assuming ring flexibility is constant, the redundants are resolved
+        # to 3 independent equations.
+        # TODO: I'm pretty sure these are wrong. Redundants SHOULD be a function
+        # of moment at *each* cut, not just the *current* cut.
+        bmo = -np.sum(moment_i * dlsp) / pp
+        ho = -np.sum(moment_i * (z_pb - zzf) * dlsp) / ioy_f
+        vo = -np.sum(moment_i * y_pb * dlsp) / ioz_f
+
+        # Net internal ring bending moment, shear, and axial loads at a segment are now calculated.
         # ben = bmo + v_0 * ypb + h_0 * (zpb - zzf) + 0.5 * (moment_i + moment_i1)
 
     def sizing(
