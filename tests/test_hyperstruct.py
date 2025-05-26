@@ -145,10 +145,10 @@ if __name__ == "__main__":  # pragma: no cover
         orientation="FS",
         name="Rounded Rectangle",
         number=400.0,
-        width=15.0,
-        depth=15.0,
-        vertical_centroid=25.0,
-        radius=7,
+        width=60.0,
+        depth=50.0,
+        vertical_centroid=30.0,
+        radius=24,
     )
     # angles = np.linspace(0, np.pi, num=10)
     # coords = []
@@ -173,14 +173,34 @@ if __name__ == "__main__":  # pragma: no cover
     frm = MajorFrame(
         material=material,
         fs_loc=400.0,
-        loads=np.array([[1.0, 1.0, 200.0, 0.0, 0.0]]),
+        loads=np.array(
+            [
+                [10.0, 45.0, 200.0, 0.0, 0.0],
+                [-10.0, 45.0, 200.0, 0.0, 0.0],
+            ]
+        ),
         geom=obj,
-        fd=4.2,
+        fd=6.4,
     )
-    print(f"Upper Panel = {frm.geom.upper_panel}")
-    print(f" Side Panel = {frm.geom.side_panel}")
-    print(f"Lower Panel = {frm.geom.lower_panel}")
-    zzf, inertias, cuts = frm.geometry_cuts()
-    coords = [(row[0], row[1]) for row in cuts]
+    print(f"Upper Panel = {frm.geom.upper_panel:.3f}")
+    print(f" Side Panel = {frm.geom.side_panel:.3f}")
+    print(f"Lower Panel = {frm.geom.lower_panel:.3f}")
+
+    # Check quadrants 2 and 3
+    # y, z = frm.geom.get_coords(np.radians(300), debug=True)
+    # print(f"In quadrant 2: y={y:.1f}, z={z:.1f}\n")
+    # coords = [(y, z)]
+
+    # y, z = frm.geom.get_coords(np.radians(225), debug=True)
+    # print(f"In quadrant 3: y={y:.1f}, z={z:.1f}")
+    # coords = [(y, z)]
+
+    frm.synthesis(16)
+    print(f"Frame weight = {frm.weight:.1f} [lbs]")
+
+    zzf, inertias, cuts = frm.geometry_cuts(32)
+    coords = [(row[5], row[6]) for row in cuts]
+    # for row in coords:
+    #     print(row)
 
     obj.show(coords)

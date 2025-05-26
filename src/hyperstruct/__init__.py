@@ -466,14 +466,12 @@ class Station:
             print(f"    x_2 = {x_2:.2f}")
             print(f"    y_1 = {y_1:.2f}")
             print(f"    y_2 = {y_2:.2f}")
-        if abs(x_1) >= self.wo:
-            x = x_1
-            y = y_1
-        elif abs(x_2) >= self.wo:
-            x = x_2
-            y = y_2
-        else:
-            raise ValueError("Could not find an intersection in the corner!")
+        # The intersection we are interested in is always the one with the largest
+        # x-magnitude.
+        x_i = np.array([x_1, x_2])
+        y_i = np.array([y_1, y_2])
+        x = x_i.flat[np.abs(x_i).argmax()]
+        y = y_i[0] if x == x_i[0] else y_i[1]
 
         return (x, y)
 
@@ -504,8 +502,8 @@ class Station:
         phi_1 = np.arctan(self.wo / d)
         phi_2 = np.arctan(w / self.doo)
         phi_3 = np.arctan(self.doo / w) + np.pi / 2
-        phi_4 = np.arctan(d / self.wo) + np.pi / 2
-        phi_5 = np.arctan(d / self.wo) + np.pi
+        phi_4 = np.arctan(self.wo / d) + np.pi / 2
+        phi_5 = np.arctan(self.wo / d) + np.pi
         phi_6 = 3 * np.pi / 2 - np.arctan(self.doo / w)
         phi_7 = 3 * np.pi / 2 + np.arctan(self.doo / w)
         phi_8 = 3 * np.pi / 2 + np.arctan(d / self.wo)
@@ -559,6 +557,9 @@ class Station:
 
         Returns:
             Tuple of coordinates as floats, for example (x, y)
+
+        Raises:
+            ValueError: Radius value impossibly defined.
         """
         if self.is_ellipse:
             # Calculate the eccentricity
