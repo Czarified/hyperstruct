@@ -1439,7 +1439,7 @@ class MajorFrame(Component):
                         "color": "red",
                     },
                 )
-                _ = ax.annotate(vertical, xy=v_tip)
+                _ = ax.annotate(abs(vertical), xy=v_tip)
             if horizontal != 0.0:
                 _ = ax.annotate(
                     "",
@@ -1452,7 +1452,7 @@ class MajorFrame(Component):
                     },
                 )
                 anchor = "left" if horizontal > 0 else "right"
-                _ = ax.annotate(vertical, xy=h_tip, ha=anchor)
+                _ = ax.annotate(abs(horizontal), xy=h_tip, ha=anchor)
             if moment != 0.0:
                 z_a = z - self.geom.depth / 10
                 z_b = z + self.geom.depth / 10
@@ -1481,7 +1481,7 @@ class MajorFrame(Component):
                 )
                 moment_text = (y_moment, z)
                 anchor = "left" if moment > 0 else "right"
-                _ = ax.annotate(moment, xy=moment_text, ha=anchor)
+                _ = ax.annotate(abs(moment), xy=moment_text, ha=anchor)
 
         _ = ax.set_xlabel("Butt Line, $BL$", fontfamily="serif")
         _ = ax.set_ylabel("Water Line, $WL$", fontfamily="serif")
