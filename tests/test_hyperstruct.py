@@ -141,20 +141,6 @@ def test_rounded(rounded: Station) -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     # This snippet just verifies the show method and get_coords.
-    obj = Station(
-        orientation="FS",
-        name="Rounded Rectangle",
-        number=400.0,
-        width=60.0,
-        depth=50.0,
-        vertical_centroid=30.0,
-        radius=24,
-    )
-    # angles = np.linspace(0, np.pi, num=10)
-    # coords = []
-    # for theta in angles:
-    #     x, y = obj.get_coords(theta)
-    #     coords.append((x, y))
     material = Material(
         rho=0.1,
         E=10.5e6,
@@ -170,13 +156,30 @@ if __name__ == "__main__":  # pragma: no cover
         db_r=116,
     )
 
+    obj = Station(
+        orientation="FS",
+        name="Rounded Rectangle",
+        number=400.0,
+        width=60.0,
+        depth=50.0,
+        vertical_centroid=30.0,
+        radius=24,
+    )
+    # angles = np.linspace(0, np.pi, num=10)
+    # coords = []
+    # for theta in angles:
+    #     x, y = obj.get_coords(theta)
+    #     coords.append((x, y))
+
     frm = MajorFrame(
         material=material,
         fs_loc=400.0,
         loads=np.array(
             [
-                [10.0, 45.0, 200.0, 0.0, 0.0],
-                [-10.0, 45.0, 200.0, 0.0, 0.0],
+                [15.0, 56.5, 200.0, 10.0, 0.0],
+                [31.5, 30.0, 0.0, 0.0, 10.0],
+                [-15.0, 56.5, 200.0, -10.0, 0.0],
+                [-31.5, 30.0, 0.0, 0.0, -10.0],
             ]
         ),
         geom=obj,
@@ -203,4 +206,4 @@ if __name__ == "__main__":  # pragma: no cover
     # for row in coords:
     #     print(row)
 
-    obj.show(coords)
+    _ = frm.show(coords)

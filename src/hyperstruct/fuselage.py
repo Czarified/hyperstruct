@@ -9,11 +9,15 @@ from copy import copy
 from dataclasses import dataclass
 
 # from typing import Dict
-# from typing import List
 from typing import Any
+from typing import List
+from typing import Optional
 from typing import Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
+from matplotlib.patches import FancyArrowPatch
 from numpy.typing import ArrayLike
 from scipy.optimize import minimize_scalar
 
@@ -1397,6 +1401,114 @@ class MajorFrame(Component):
 
     fd: float
     """Frame depth, constant around periphery."""
+
+    def show(
+        self, coords: Optional[List[Tuple[float, float]]] = None, save: bool = False
+    ) -> None:
+        """Plot the frame and applied loads."""
+        fig, ax = self.geom.show(coords, display=False)
+        # Plot an arrow at each force location
+        for load in self.loads:
+            # Slice the row and only use the first 2 columns as the coords
+            y, z = load[:2]
+            point = (y, z)
+            vertical = load[2]
+            horizontal = load[3]
+            moment = load[4]
+            # Calculate the tip coords.
+            # This is hard-coded to scale length as 20% of the frame dimensions.
+            if vertical > 0:
+                v_tip = (y, z + self.geom.depth / 5)
+            else:
+                v_tip = (y, z - self.geom.depth / 5)
+
+            if horizontal > 0:
+                h_tip = (y + self.geom.width / 5, z)
+            else:
+                h_tip = (y - self.geom.width / 5, z)
+
+            # Plot the actual annotations
+            if vertical != 0.0:
+                _ = ax.annotate(
+                    "",
+                    xytext=point,
+                    xy=v_tip,
+                    arrowprops={
+                        "arrowstyle": "-|>",
+                        "connectionstyle": "arc3",
+                        "color": "red",
+                    },
+                )
+                _ = ax.annotate(vertical, xy=v_tip)
+            if horizontal != 0.0:
+                _ = ax.annotate(
+                    "",
+                    xytext=point,
+                    xy=h_tip,
+                    arrowprops={
+                        "arrowstyle": "-|>",
+                        "connectionstyle": "arc3",
+                        "color": "red",
+                    },
+                )
+                anchor = "left" if horizontal > 0 else "right"
+                _ = ax.annotate(vertical, xy=h_tip, ha=anchor)
+            if moment != 0.0:
+                z_a = z - self.geom.depth / 10
+                z_b = z + self.geom.depth / 10
+                if moment > 0:
+                    arrow = FancyArrowPatch(
+                        posA=(y, z_a),
+                        posB=(y, z_b),
+                        mutation_scale=10,
+                        arrowstyle="-|>",
+                        color="red",
+                        connectionstyle="arc3,rad=0.3",
+                    )
+                else:
+                    arrow = FancyArrowPatch(
+                        posA=(y, z_a),
+                        posB=(y, z_b),
+                        mutation_scale=10,
+                        arrowstyle="-|>",
+                        color="red",
+                        connectionstyle="arc3,rad=-0.3",
+                    )
+
+                _ = ax.add_patch(arrow)
+                y_moment = (
+                    y + self.geom.width / 10 if moment > 0 else y - self.geom.width / 10
+                )
+                moment_text = (y_moment, z)
+                anchor = "left" if moment > 0 else "right"
+                _ = ax.annotate(moment, xy=moment_text, ha=anchor)
+
+        _ = ax.set_xlabel("Butt Line, $BL$", fontfamily="serif")
+        _ = ax.set_ylabel("Water Line, $WL$", fontfamily="serif")
+        _ = ax.tick_params(axis="both", which="both", direction="in")
+        _ = ax.set_title("Frame Applied Loads", fontfamily="serif")
+        _ = ax.legend(
+            handles=[
+                Line2D([0], [0], lw="1.5", color="black", label="Frame OML"),
+                Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    markerfacecolor="teal",
+                    markersize=5,
+                    label="Cut Locations",
+                ),
+                Line2D([0], [0], lw="1", color="red", label="Loads (not to scale)"),
+            ],
+            prop={"size": "small", "family": "serif"},
+            frameon=False,
+        )
+
+        if save:
+            fig.savefig(f"FS{self.fs_loc}_geom_loads.png")
+
+        plt.show()
 
     def synthesis(self, num: int = 60) -> None:
         """Controls the frame weight estimating process. [FFRME].

@@ -247,7 +247,9 @@ class Station:
         else:
             raise NotImplementedError
 
-    def show(self, coords: Optional[List[Tuple[float, float]]] = None) -> None:
+    def show(
+        self, coords: Optional[List[Tuple[float, float]]] = None, display: bool = True
+    ) -> Tuple:
         """Plot the station shape for a visual check.
 
         This method just uses matplotlib to draw the shape on a plot.
@@ -269,6 +271,7 @@ class Station:
                 height=self.depth,
                 fill=False,
                 edgecolor="black",
+                linewidth=1.5,
             )
         elif self.radius < self.width / 2:
             xy = (-self.width / 2, self.vertical_centroid - self.depth / 2)
@@ -280,6 +283,7 @@ class Station:
                 boxstyle=style,
                 fill=False,
                 edgecolor="black",
+                linewidth=1.5,
             )
         else:
             obj = Circle(
@@ -287,6 +291,7 @@ class Station:
                 radius=self.radius,
                 fill=False,
                 edgecolor="black",
+                linewidth=1.5,
             )
         ax.add_artist(obj)
         obj.set_clip_box(ax.bbox)
@@ -307,6 +312,7 @@ class Station:
             markeredgecolor="black",
             markersize=10,
             linestyle="none",
+            alpha=0.8,
         )
 
         for x, y in zip(center_x, center_y, strict=True):
@@ -317,7 +323,8 @@ class Station:
                     fill=False,
                     edgecolor="black",
                     linestyle=(0, (10, 14)),
-                    linewidth=0.35,
+                    linewidth=0.25,
+                    alpha=0.7,
                 )
             )
 
@@ -327,11 +334,15 @@ class Station:
                     x,
                     y,
                     marker="o",
-                    markerfacecolor="red",
+                    markerfacecolor="teal",
                     markeredgecolor="none",
-                    markersize=5,
+                    markersize=3,
                 )
-        plt.show()
+
+        if display:
+            plt.show()
+
+        return (fig, ax)
 
     def _quadratic_sol(
         self, m: float, q: float, p: float
