@@ -336,7 +336,7 @@ class Station:
                     marker="o",
                     markerfacecolor="teal",
                     markeredgecolor="none",
-                    markersize=3,
+                    markersize=4,
                 )
 
         if display:
@@ -532,6 +532,9 @@ class Station:
             y = -r + self.vertical_centroid
             if debug:
                 print(f"Lower Horizontal Intersection; x={x:.1f}, y={y:.1f}")
+                print(f"theta = {np.degrees(theta):.2f}deg")
+                print(f"phi_4 = {np.degrees(phi_4):.0f}deg")
+                print(f"phi_5 = {np.degrees(phi_5):.0f}deg")
         elif (theta > phi_2) and (theta < phi_3):
             # Intersection is on RH vertical portion
             # Use a triangle instead of a circle
