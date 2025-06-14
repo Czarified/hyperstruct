@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 import pytest_check as pycheck
+import pandas as pd
 
 from hyperstruct import Material
 from hyperstruct import Station
@@ -198,12 +199,28 @@ if __name__ == "__main__":  # pragma: no cover
     # print(f"In quadrant 3: y={y:.1f}, z={z:.1f}")
     # coords = [(y, z)]
 
-    frm.synthesis(16)
-    print(f"Frame weight = {frm.weight:.1f} [lbs]")
-
-    zzf, inertias, cuts = frm.geometry_cuts(32)
+    num = 16
+    zzf, inertias, cuts = frm.geometry_cuts(num)
     coords = [(row[5], row[6]) for row in cuts]
-    # for row in coords:
-    #     print(row)
+    geom_df = pd.DataFrame(cuts, columns=["y_bj", "z_bj", "y_pbj", "z_pbj", "dlsp_j", "y_i", "z_i", "y_p", "z_p", "theta_k"])
+    print("Geometry Cut Table")
+    print(geom_df)
+
+    dls = (frm.geom.upper_panel + frm.geom.side_panel + frm.geom.lower_panel) / num
+    dlsp = np.mean(cuts[:, 4])
+    print(f" DLS = {dls:.1f}[in]")
+    print(f"DLSP = {dlsp:.1f}[in]")
+    print("")
+
+    print("Internal Loads Table:")
+    loads = pd.DataFrame(frm.frame_loads(dls, zzf, inertias, cuts), columns=["shear", "axial", "bending"])
+    print(loads)
+    print("")
+
+    frm.synthesis(16)
+    sizing = pd.DataFrame(frm.results, columns=[ "w_j", "tcap", "t_w_str", "t_w_res" ])
+    print("Sizing Results Table")
+    print(sizing)
+    print(f"Frame weight = {frm.weight:.1f} [lbs]")
 
     _ = frm.show(coords)

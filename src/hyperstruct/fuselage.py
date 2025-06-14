@@ -6,7 +6,7 @@ This file contains all global variables, classes, and functions related to fusel
 """
 
 from copy import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # from typing import Dict
 from typing import Any
@@ -1486,7 +1486,7 @@ class MajorFrame(Component):
         _ = ax.set_xlabel("Butt Line, $BL$", fontfamily="serif")
         _ = ax.set_ylabel("Water Line, $WL$", fontfamily="serif")
         _ = ax.tick_params(axis="both", which="both", direction="in")
-        _ = ax.set_title("Frame Applied Loads", fontfamily="serif")
+        _ = ax.set_title(f"FS{self.fs_loc} Frame Applied Loads", fontfamily="serif")
         _ = ax.legend(
             handles=[
                 Line2D([0], [0], lw="1.5", color="black", label="Frame OML"),
@@ -1533,9 +1533,22 @@ class MajorFrame(Component):
         dlsp = np.mean(cut_geom[:, 4])
 
         # Final structural synthesis
-        self.weight = 0
+        self.results = np.zeros(4)
+        """Frame segment results table.
+    
+        [
+            [w_j, tcap, t_w_str, t_w_res],
+            ... ,
+            [...]
+        ]
+        """
         for segment in loads_j:
-            self.weight += self.sizing(segment[0], segment[1], segment[2], dlsp)
+            results_j = self.sizing(segment[0], segment[1], segment[2], dlsp)
+            self.results = np.vstack((self.results, results_j))
+
+        self.results = np.delete(self.results, (0), axis=0)
+            
+        self.weight = self.results[:, 0].sum()
 
     def geometry_cuts(self, num) -> Tuple[float, ArrayLike, ArrayLike]:
         """Calculate the frame node coordinates for all synthesis cuts. [FRMND1].
@@ -1809,6 +1822,7 @@ class MajorFrame(Component):
             Array: Segment centroidal net internal loads
         """
         ioz_s, ioy_s, ioz_f, ioy_f = inertias
+        #   C U T    G E O M    M A T R I X    R E F E R E N C E
         # [
         #   0 y_bj: OML midpoint y,
         #   1 z_bj: OML midpoint z,
@@ -1914,7 +1928,8 @@ class MajorFrame(Component):
             k : Reduction factor (default 0.9)
 
         Returns:
-            float of frame segment weight
+            weight: float of frame segment weight
+            results: dict of resulting dimensions
         """
         # Area required from bending strength
         # Criteria: No Yield at Limit
@@ -1963,8 +1978,10 @@ class MajorFrame(Component):
         # When you stack them all together, each segment will be "bounded" by stiffeners
         volume = (bb_2 * (t_w + 0.005)) + (2 * bb_2 * tcap) + (self.fd * t_w)
         weight = self.material.rho * dlsp * volume
-
-        return float(weight)
+        results = np.array(
+            [weight, tcap, t_w_str, t_w_res]
+        )
+        return results
 
 
 @dataclass
