@@ -1550,7 +1550,7 @@ class MajorFrame(Component):
             
         self.weight = self.results[:, 0].sum()
 
-    def geometry_cuts(self, num) -> Tuple[float, ArrayLike, ArrayLike]:
+    def geometry_cuts(self, num, debug: bool=False) -> Tuple[float, ArrayLike, ArrayLike]:
         """Calculate the frame node coordinates for all synthesis cuts. [FRMND1].
 
         The frame synthesis cut coordinates are based on equal-length segments
@@ -1559,6 +1559,7 @@ class MajorFrame(Component):
 
         Args:
             num: Integer number of cuts to take
+            debug: Boolean for debug information printing
 
         Returns:
             zzf: Elastic Center
@@ -1591,7 +1592,7 @@ class MajorFrame(Component):
         # print(f"dls = {dls:.3f}")
         for _cut in range(num):
             # print(f"Cut {_cut:.0f}")
-            y_i, z_i = self.geom.get_coords(theta_i)
+            y_i, z_i = self.geom.get_coords(theta_i, debug=debug)
             # We want all the cuts to be the same length, but we don't know the angle
             # that achieves this. We can iterate by using an angle and checking the
             # iteration step segment length.
@@ -1618,10 +1619,9 @@ class MajorFrame(Component):
             # del_y = y_k - y_i
             # del_z = z_k - z_i
             # dls_k = np.sqrt(del_y**2 + del_z**2)
-
-            # print(f"     dls_k = {dls_k:.3f}")
-            # print(f"     theta_i = {theta_i:.3f}")
-            # print(f"     theta_k = {theta_k:.3f}")
+            if debug:
+                print(f"     theta_i = {np.degrees(theta_i):.2f}deg")
+                print(f"     theta_k = {np.degrees(theta_k):.2f}deg")
 
             # Calculate the shell midpoint
             y_bj = np.average([y_i, y_k])
@@ -1652,6 +1652,8 @@ class MajorFrame(Component):
             # Next cut start is this cut's end
             theta_i = copy(theta_k)
 
+        # Remove the init row (this has no mathematical meaning)
+        cut_geom = np.delete(cut_geom, (0), axis=0)
         # The elastic center
         zzf = np.sum(cut_geom[:, 1]) * dls / perimeter
         # Section second moment of areas
