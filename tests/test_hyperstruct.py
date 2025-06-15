@@ -1,9 +1,12 @@
 """Test cases for the general module."""
 
+from copy import copy
+
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pytest
 import pytest_check as pycheck
-import pandas as pd
 
 from hyperstruct import Material
 from hyperstruct import Station
@@ -184,25 +187,39 @@ if __name__ == "__main__":  # pragma: no cover
             ]
         ),
         geom=obj,
-        fd=6.4,
+        fd=6.0,
     )
     print(f"Upper Panel = {frm.geom.upper_panel:.3f}")
     print(f" Side Panel = {frm.geom.side_panel:.3f}")
     print(f"Lower Panel = {frm.geom.lower_panel:.3f}")
 
-    # Check quadrants 2 and 3
-    # y, z = frm.geom.get_coords(np.radians(300), debug=True)
-    # print(f"In quadrant 2: y={y:.1f}, z={z:.1f}\n")
+    # Check coords
+    # y, z = frm.geom.get_coords(np.radians(130), debug=True)
+    # print(f"In quadrant 4: y={y:.1f}, z={z:.1f}\n")
     # coords = [(y, z)]
 
     # y, z = frm.geom.get_coords(np.radians(225), debug=True)
     # print(f"In quadrant 3: y={y:.1f}, z={z:.1f}")
     # coords = [(y, z)]
 
-    num = 16
-    zzf, inertias, cuts = frm.geometry_cuts(num)
-    coords = [(row[5], row[6]) for row in cuts]
-    geom_df = pd.DataFrame(cuts, columns=["y_bj", "z_bj", "y_pbj", "z_pbj", "dlsp_j", "y_i", "z_i", "y_p", "z_p", "theta_k"])
+    num = 25
+    zzf, inertias, cuts = frm.geometry_cuts(num, debug=False)
+    geom_df = pd.DataFrame(
+        cuts,
+        columns=[
+            "y_bj",
+            "z_bj",
+            "y_pbj",
+            "z_pbj",
+            "dlsp_j",
+            "y_i",
+            "z_i",
+            "y_p",
+            "z_p",
+            "theta_k",
+        ],
+    )
+    geom_df["theta_kdeg"] = np.degrees(geom_df.theta_k)
     print("Geometry Cut Table")
     print(geom_df)
 
@@ -213,14 +230,30 @@ if __name__ == "__main__":  # pragma: no cover
     print("")
 
     print("Internal Loads Table:")
-    loads = pd.DataFrame(frm.frame_loads(dls, zzf, inertias, cuts), columns=["shear", "axial", "bending"])
+    loads = pd.DataFrame(
+        frm.frame_loads(dls, zzf, inertias, cuts), columns=["shear", "axial", "bending"]
+    )
     print(loads)
     print("")
 
-    frm.synthesis(16)
-    sizing = pd.DataFrame(frm.results, columns=[ "w_j", "tcap", "t_w_str", "t_w_res" ])
+    frm.synthesis(num)
+    sizing = pd.DataFrame(frm.results, columns=["w_j", "tcap", "t_w_str", "t_w_res"])
     print("Sizing Results Table")
     print(sizing)
     print(f"Frame weight = {frm.weight:.1f} [lbs]")
 
-    _ = frm.show(coords)
+    _ = frm.show(show_coords=True, save=True)
+
+    # Sweep over number of cuts to observe the prediction sensitivity
+    nums = np.linspace(15, 90, dtype=int, num=25)
+    weights = []
+    for n in nums:
+        frm.synthesis(n)
+        weights.append(copy(frm.weight))
+
+    ser = pd.Series(weights, index=nums, name="Frame Weight Sweep")
+    ser.index.name = "Cuts"
+    print(ser)
+
+    ser.plot(kind="bar", ylim=(0, 500), ylabel="weight")
+    plt.show()

@@ -513,7 +513,7 @@ class Station:
         phi_1 = np.arctan(self.wo / d)
         phi_2 = np.arctan(w / self.doo)
         phi_3 = np.arctan(self.doo / w) + np.pi / 2
-        phi_4 = np.arctan(self.wo / d) + np.pi / 2
+        phi_4 = np.pi - np.arctan(self.wo / d)
         phi_5 = np.arctan(self.wo / d) + np.pi
         phi_6 = 3 * np.pi / 2 - np.arctan(self.doo / w)
         phi_7 = 3 * np.pi / 2 + np.arctan(self.doo / w)

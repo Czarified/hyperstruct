@@ -6,12 +6,10 @@ This file contains all global variables, classes, and functions related to fusel
 """
 
 from copy import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # from typing import Dict
 from typing import Any
-from typing import List
-from typing import Optional
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -1402,11 +1400,14 @@ class MajorFrame(Component):
     fd: float
     """Frame depth, constant around periphery."""
 
-    def show(
-        self, coords: Optional[List[Tuple[float, float]]] = None, save: bool = False
-    ) -> None:
+    def show(self, show_coords: bool = False, save: bool = False) -> None:
         """Plot the frame and applied loads."""
-        fig, ax = self.geom.show(coords, display=False)
+        if show_coords:
+            coords = [(row[5], row[6]) for row in self.cuts]
+            fig, ax = self.geom.show(coords, display=False)
+        else:
+            fig, ax = self.geom.show(display=False)
+
         # Plot an arrow at each force location
         for load in self.loads:
             # Slice the row and only use the first 2 columns as the coords
@@ -1535,7 +1536,7 @@ class MajorFrame(Component):
         # Final structural synthesis
         self.results = np.zeros(4)
         """Frame segment results table.
-    
+
         [
             [w_j, tcap, t_w_str, t_w_res],
             ... ,
@@ -1546,11 +1547,14 @@ class MajorFrame(Component):
             results_j = self.sizing(segment[0], segment[1], segment[2], dlsp)
             self.results = np.vstack((self.results, results_j))
 
+        # Remove the init row
         self.results = np.delete(self.results, (0), axis=0)
-            
+
         self.weight = self.results[:, 0].sum()
 
-    def geometry_cuts(self, num, debug: bool=False) -> Tuple[float, ArrayLike, ArrayLike]:
+    def geometry_cuts(
+        self, num, debug: bool = False
+    ) -> Tuple[float, ArrayLike, ArrayLike]:
         """Calculate the frame node coordinates for all synthesis cuts. [FRMND1].
 
         The frame synthesis cut coordinates are based on equal-length segments
@@ -1665,6 +1669,7 @@ class MajorFrame(Component):
         ioy_f = (np.sum(cut_geom[:, 3]) - zzf) ** 2 * np.sum(cut_geom[:, 4])
 
         inertias = np.array([ioz_s, ioy_s, ioz_f, ioy_f])
+        self.cuts = cut_geom
 
         return zzf, inertias, cut_geom
 
@@ -1980,9 +1985,7 @@ class MajorFrame(Component):
         # When you stack them all together, each segment will be "bounded" by stiffeners
         volume = (bb_2 * (t_w + 0.005)) + (2 * bb_2 * tcap) + (self.fd * t_w)
         weight = self.material.rho * dlsp * volume
-        results = np.array(
-            [weight, tcap, t_w_str, t_w_res]
-        )
+        results = np.array([weight, tcap, t_w_str, t_w_res])
         return results
 
 
