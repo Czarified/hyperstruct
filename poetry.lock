@@ -3286,4 +3286,4 @@ tests-strict = ["pytest (==4.6.0)", "pytest (==6.2.5)", "pytest-cov (==3.0.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10, <4.0"
-content-hash = "4977bc154a27b777656e0939c02081b6c8669e0a8f74117907bb6c7e0b349e42"
+content-hash = "128a8025d980305c9690a7e4374744f5ec7dfed8211dada049fc890fe4b5ac70"
