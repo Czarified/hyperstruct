@@ -5,11 +5,18 @@ The fuselage module operates as a stand-alone program or in conjuction with othe
 This file contains all global variables, classes, and functions related to fuselage weight synthesis.
 """
 
+from copy import copy
 from dataclasses import dataclass
+
+# from typing import Dict
 from typing import Any
 from typing import Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
+from matplotlib.patches import FancyArrowPatch
+from numpy.typing import ArrayLike
 from scipy.optimize import minimize_scalar
 
 from hyperstruct import Component
@@ -1353,10 +1360,637 @@ class MajorFrame(Component):
     or may be common frames. Common frames, those which occur at the same fuselage stations,
     are designed for th combined loads from as many as three (3) sources (e.g. a frame which
     is used for reacting the wing rear spar, main landing gear trunnion, and forward nacelle).
+
+
+    Determine External Forces
+    Define Geometry
+        Determine synthesis cuts around the periphery
+    Calculate Internal Ring Loads
+        At the midpoint of each ring segment
+    Size the Ring elements
+    Calculate the Weight
     """
 
     fs_loc: float
     """Fuselage Station location (e.g. 150in from origin)."""
+
+    loads: ArrayLike
+    """The loads list contains all external loads applied on this frame.
+    [
+        [y, z, V, H, M],
+        ... ,
+        [...]
+    ]
+
+    Loads are provided as a matrix. Each row is a unique external load.
+    The first two columns are the y and z coordinates of the concentrated
+    loads (BL and WL). The last three columns are, respectively, the vertical
+    force, horizontal force, and moment.
+
+    Note: There is not strict control differentiating between coordinate or load vectors!
+    """
+
+    geom: Station
+    """The MajorFrame Geometry.
+
+    The geometry is a Station type, which provides the general shape dimensions. This
+    would be the Outer Mold Line (OML) of the MajorFrame.
+    """
+
+    fd: float
+    """Frame depth, constant around periphery."""
+
+    def show(self, show_coords: bool = False, save: bool = False) -> None:
+        """Plot the frame and applied loads."""
+        if show_coords:
+            coords = [(row[5], row[6]) for row in self.cuts]
+            fig, ax = self.geom.show(coords, display=False)
+        else:
+            fig, ax = self.geom.show(display=False)
+
+        # Plot an arrow at each force location
+        for load in self.loads:
+            # Slice the row and only use the first 2 columns as the coords
+            y, z = load[:2]
+            point = (y, z)
+            vertical = load[2]
+            horizontal = load[3]
+            moment = load[4]
+            # Calculate the tip coords.
+            # This is hard-coded to scale length as 20% of the frame dimensions.
+            if vertical > 0:
+                v_tip = (y, z + self.geom.depth / 5)
+            else:
+                v_tip = (y, z - self.geom.depth / 5)
+
+            if horizontal > 0:
+                h_tip = (y + self.geom.width / 5, z)
+            else:
+                h_tip = (y - self.geom.width / 5, z)
+
+            # Plot the actual annotations
+            if vertical != 0.0:
+                _ = ax.annotate(
+                    "",
+                    xytext=point,
+                    xy=v_tip,
+                    arrowprops={
+                        "arrowstyle": "-|>",
+                        "connectionstyle": "arc3",
+                        "color": "red",
+                    },
+                )
+                _ = ax.annotate(abs(vertical), xy=v_tip)
+            if horizontal != 0.0:
+                _ = ax.annotate(
+                    "",
+                    xytext=point,
+                    xy=h_tip,
+                    arrowprops={
+                        "arrowstyle": "-|>",
+                        "connectionstyle": "arc3",
+                        "color": "red",
+                    },
+                )
+                anchor = "left" if horizontal > 0 else "right"
+                _ = ax.annotate(abs(horizontal), xy=h_tip, ha=anchor)
+            if moment != 0.0:
+                z_a = z - self.geom.depth / 10
+                z_b = z + self.geom.depth / 10
+                if moment > 0:
+                    arrow = FancyArrowPatch(
+                        posA=(y, z_a),
+                        posB=(y, z_b),
+                        mutation_scale=10,
+                        arrowstyle="-|>",
+                        color="red",
+                        connectionstyle="arc3,rad=0.3",
+                    )
+                else:
+                    arrow = FancyArrowPatch(
+                        posA=(y, z_a),
+                        posB=(y, z_b),
+                        mutation_scale=10,
+                        arrowstyle="-|>",
+                        color="red",
+                        connectionstyle="arc3,rad=-0.3",
+                    )
+
+                _ = ax.add_patch(arrow)
+                y_moment = (
+                    y + self.geom.width / 10 if moment > 0 else y - self.geom.width / 10
+                )
+                moment_text = (y_moment, z)
+                anchor = "left" if moment > 0 else "right"
+                _ = ax.annotate(abs(moment), xy=moment_text, ha=anchor)
+
+        _ = ax.set_xlabel("Butt Line, $BL$", fontfamily="serif")
+        _ = ax.set_ylabel("Water Line, $WL$", fontfamily="serif")
+        _ = ax.tick_params(axis="both", which="both", direction="in")
+        _ = ax.set_title(f"FS{self.fs_loc} Frame Applied Loads", fontfamily="serif")
+        _ = ax.legend(
+            handles=[
+                Line2D([0], [0], lw="1.5", color="black", label="Frame OML"),
+                Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    markerfacecolor="teal",
+                    markersize=5,
+                    label="Cut Locations",
+                ),
+                Line2D([0], [0], lw="1", color="red", label="Loads (not to scale)"),
+            ],
+            prop={"size": "small", "family": "serif"},
+            frameon=False,
+        )
+
+        if save:
+            fig.savefig(f"FS{self.fs_loc}_geom_loads.png")
+
+        plt.show()
+
+    def synthesis(self, num: int = 60) -> None:
+        """Controls the frame weight estimating process. [FFRME].
+
+        Organizes load data and calls geometry and internal load routines
+        to calculate sizing and weight.
+
+        Args:
+            num : Integer number of cuts to take around the periphery. Default 60.
+        """
+        perimeter = (
+            self.geom.upper_panel + 2 * self.geom.side_panel + self.geom.lower_panel
+        )
+        dls = perimeter / num
+
+        # Synthesis cut coordinates
+        zzf, inertias, cut_geom = self.geometry_cuts(num)
+
+        # Calculate internal frame loads
+        loads_j = self.frame_loads(dls, zzf, inertias, cut_geom)
+        # Use the average segment neutral axis length
+        dlsp = np.mean(cut_geom[:, 4])
+
+        # Final structural synthesis
+        self.results = np.zeros(4)
+        """Frame segment results table.
+
+        [
+            [w_j, tcap, t_w_str, t_w_res],
+            ... ,
+            [...]
+        ]
+        """
+        for segment in loads_j:
+            results_j = self.sizing(segment[0], segment[1], segment[2], dlsp)
+            self.results = np.vstack((self.results, results_j))
+
+        # Remove the init row
+        self.results = np.delete(self.results, (0), axis=0)
+
+        self.weight = self.results[:, 0].sum()
+
+    def geometry_cuts(
+        self, num, debug: bool = False
+    ) -> Tuple[float, ArrayLike, ArrayLike]:
+        """Calculate the frame node coordinates for all synthesis cuts. [FRMND1].
+
+        The frame synthesis cut coordinates are based on equal-length segments
+        along the external contour of that frame. The first cut is taken at top
+        centerline, which also defines the coordinates of the last cut.
+
+        Args:
+            num: Integer number of cuts to take
+            debug: Boolean for debug information printing
+
+        Returns:
+            zzf: Elastic Center
+            inertias: Inertias array
+            cut_geom: cut_geometry matrix, where each row is a segment and columns are
+                [
+                    0 y_bj: OML midpoint y,
+                    1 z_bj: OML midpoint z,
+                    2 y_pbj: Centroid y,
+                    3 z_pbj: Centroid z,
+                    4 dlsp_j: Segment length,
+                    5 y_i: Cut y,
+                    6 z_i: Cut z,
+                    7 y_p: Cut Centroid y,
+                    8 z_p: Cut Centroid z,
+                    9 theta_k: Cut angle
+                ]
+        """
+        perimeter = (
+            self.geom.upper_panel + 2 * self.geom.side_panel + self.geom.lower_panel
+        )
+        dls = perimeter / num
+
+        # Initialize the cut matrix
+        cut_geom = np.zeros(10, dtype=np.float32)
+
+        # Our first cut starts at the top dead center of the station
+        theta_i = 0.0
+
+        # print(f"dls = {dls:.3f}")
+        for _cut in range(num):
+            # print(f"Cut {_cut:.0f}")
+            y_i, z_i = self.geom.get_coords(theta_i, debug=debug)
+            # We want all the cuts to be the same length, but we don't know the angle
+            # that achieves this. We can iterate by using an angle and checking the
+            # iteration step segment length.
+            # Initial dsl_k doesn't matter.
+
+            def objective(phi, *args) -> float:
+                """An objective local function to minimize.
+
+                Returns:
+                    distance between the previous point and new point.
+                """
+                y_i, z_i = args
+                y_k, z_k = self.geom.get_coords(phi)
+                del_y = y_k - y_i
+                del_z = z_k - z_i
+                dls_k = np.sqrt(del_y**2 + del_z**2)
+                return abs(dls - dls_k)
+
+            solution = minimize_scalar(
+                objective,
+                bounds=[theta_i, theta_i + np.pi / 4],
+                args=(y_i, z_i),
+                options={"xatol": 0.05},
+            )
+            # print(solution)
+            theta_k = solution.x
+            y_k, z_k = self.geom.get_coords(theta_k)
+            # del_y = y_k - y_i
+            # del_z = z_k - z_i
+            # dls_k = np.sqrt(del_y**2 + del_z**2)
+            if debug:
+                print(f"     theta_i = {np.degrees(theta_i):.2f}deg")
+                print(f"     theta_k = {np.degrees(theta_k):.2f}deg")
+
+            # Calculate the shell midpoint
+            y_bj = np.average([y_i, y_k])
+            z_bj = np.average([z_i, z_k])
+
+            # Calculate the centroidal coordiantes of the segment
+            r_i = z_i / np.cos(theta_i)
+            r_p = r_i - self.fd / 2
+            # At beginning
+            y_p = r_p * np.sin(theta_i)
+            z_p = r_p * np.cos(theta_i)
+            # At end
+            y_pk = r_p * np.sin(theta_k)
+            z_pk = r_p * np.cos(theta_k)
+            # At the midpoint
+            y_pbj = np.average([y_p, y_pk])
+            z_pbj = np.average([z_p, z_pk])
+
+            # Length of the frame
+            dlsp_j = np.sqrt((y_pk - y_p) ** 2 + (z_pk - z_p) ** 2)
+
+            # Geometry collection
+            new_row = np.array(
+                [y_bj, z_bj, y_pbj, z_pbj, dlsp_j, y_i, z_i, y_p, z_p, theta_k]
+            )
+            cut_geom = np.vstack((cut_geom, new_row))
+
+            # Next cut start is this cut's end
+            theta_i = copy(theta_k)
+
+        # Remove the init row (this has no mathematical meaning)
+        cut_geom = np.delete(cut_geom, (0), axis=0)
+        # The elastic center
+        zzf = np.sum(cut_geom[:, 1]) * dls / perimeter
+        # Section second moment of areas
+        # Of the shell
+        ioz_s = np.sum(cut_geom[:, 0]) ** 2 * dls
+        ioy_s = (np.sum(cut_geom[:, 1]) - zzf) ** 2 * dls
+        # Of the frame
+        ioz_f = np.sum(cut_geom[:, 2]) ** 2 * dls
+        ioy_f = (np.sum(cut_geom[:, 3]) - zzf) ** 2 * np.sum(cut_geom[:, 4])
+
+        inertias = np.array([ioz_s, ioy_s, ioz_f, ioy_f])
+        self.cuts = cut_geom
+
+        return zzf, inertias, cut_geom
+
+    def cut_loads(
+        self,
+        i: int,
+        jj: int,
+        theta: float,
+        dls: float,
+        zzf: float,
+        ioy_s: float,
+        ioz_s: float,
+        y: ArrayLike,
+        z: ArrayLike,
+        y_b: ArrayLike,
+        z_b: ArrayLike,
+        y_p: ArrayLike,
+        z_p: ArrayLike,
+    ) -> ArrayLike:
+        """Calculates the internal loads at the midpoint of a segment. [FRMLD.1].
+
+        For each component, the loads at the center is a function of the forces at
+        each end (i, and i+1), as well as contributions from the frame total loads
+        at the fuselage centerline.
+
+        Args:
+            i: Cut index number (integer)
+            jj: Total number of cuts
+            theta: Angle, in radians, of the section cut
+            dls: Segment length (float)
+            zzf: The Elastic Center (float)
+            dlsp_j: Segment centroidal length (float)
+            inertias: Array of second moments of area
+            y: Array of section cut y-coordinates
+            z: Array of section cut z-coordinates
+            y_b: Array of segment OML y-coordinates
+            z_b: Array of segment OML z-coordinates
+            y_p: Array of section cut centroid y-coordinates
+            z_p: Array of section cut centroid z-coordinates
+            y_pb: Array of segment centroid y-coordinates
+            z_pb: Array of segment centroid z-coordinates
+
+        Returns:
+            Array: cut loads [vertical_i, horizontal_i, moment_i]
+        """
+        total_v = np.sum(self.loads[:, 2])
+        total_h = np.sum(self.loads[:, 3])
+        total_m = (
+            np.sum(self.loads[:, 4])
+            - np.sum(self.loads[:, 1] * self.loads[:, 1])
+            - np.sum(self.loads[:, 2] * (self.loads[:, 1] - zzf))
+        )
+        da_j = np.abs((np.roll(y, 1) * z / 2) - (y * np.roll(z, 1) / 2))
+        area = np.sum(da_j)
+
+        # The shear flow the cut due to the unbalanced forces is:
+        def __local_shear_flow(i) -> float:
+            """Local function for the shear flow iteration."""
+            qi_prime_1 = 0.0
+            for n in range(2, i + 1):
+                qi_prime_1 += total_v * dls * (z_b[n - 1] - zzf) / ioy_s
+
+            qi_prime_2 = 0.0
+            for n in range(2, i + 1):
+                qi_prime_2 += total_h * dls * y_b[n - 1] / ioz_s
+
+            qi_prime = qi_prime_1 - qi_prime_2
+
+            return qi_prime
+
+        vec_qi_prime = []
+        for _i in range(1, jj + 1):
+            vec_qi_prime.append(__local_shear_flow(_i))
+
+        # The torque unbalance is needed to correct the shear flow
+        t_prime = 0.0
+
+        for _i in range(1, jj + 1):
+            try:
+                t_prime += (vec_qi_prime[i] + vec_qi_prime[i + 1]) / 2 * (
+                    y[i + 1] - y[i]
+                ) * (z_b[i]) - (z[i + 1] - z[i]) * y_b[i]
+            except IndexError:
+                t_prime += (vec_qi_prime[i] + vec_qi_prime[0]) / 2 * (y[0] - y[i]) * (
+                    z_b[i]
+                ) - (z[0] - z[i]) * y_b[i]
+
+        # Corrected shear flow for the cut
+        vec_qi = vec_qi_prime - (total_m + t_prime) / (2 * area)
+
+        # Static moment at a cut
+        moment_i = 0.0
+        for n in range(2, i + 1):
+            # All contributions from the balances shear flow
+            moment_i += ((vec_qi[n] + vec_qi[n - 1]) / 2) * (
+                (z[n] - z[n - 1]) * (y_p[i] - y_b[n - 1])
+                - (y[n] - y[n - 1]) * (z_p[i] - z_b[n - 1])
+            )
+
+        # We need to collect all the relevant external loads.
+        ext_loads = copy(self.loads)
+        # Calculate the angles
+        angles = np.arctan(ext_loads[:, 1] / ext_loads[:, 0])
+        angles = np.atleast_2d(angles).T
+        ext_loads = np.hstack((ext_loads, angles))
+        # Then filter out all the loads that happen "after" the current section cut.
+        mask = ext_loads[:, 5] <= theta
+        ext_loads = ext_loads[mask, :]
+        # Add in each contribution to the total moment.
+        for row in ext_loads:
+            # Each row in the loads matrix is all data for a single point load/moment.
+            #    0        1      2  3  4   5
+            # [y_coord, z_coord, V, H, M, theta]
+            moment_i += (
+                -row[4] + row[2] * (y_p[i] - row[0]) + row[3] * (z_p[i] - row[1])
+            )
+
+        # Static vertical force at the cut is:
+        vertical_i = 0.0
+        for n in range(2, i + 1):
+            # Shear flow contribution
+            vertical_i = ((vec_qi[n] + vec_qi[n - 1]) / 2) * (z[n] - z[n - 1])
+        # Total external contribution
+        vertical_i += np.sum(ext_loads[:, 2])
+
+        # Static horizontal force at the cut is:
+        horizontal_i = 0.0
+        for n in range(2, i + 1):
+            # Shear flow contribution
+            horizontal_i -= ((vec_qi[n] + vec_qi[n - 1]) / 2) * (y[n] - y[n - 1])
+        # Total external contribution
+        horizontal_i += np.sum(ext_loads[:, 3])
+
+        return np.array([vertical_i, horizontal_i, moment_i])
+
+    def frame_loads(
+        self,
+        dls: float,
+        zzf: float,
+        inertias: ArrayLike,
+        cut_geom: ArrayLike,
+    ) -> ArrayLike:
+        """This method calculates the final redundant loads. [FRMLD.2].
+
+        Take section cut loads from each section around the perimeter and build
+        up the final redundants, along with centroidal load values for each segment.
+
+        Args:
+            zzf: The Elastic Center (float)
+            inertias: Array of second moments of area
+            cut_geom: 2D Array of section geometry
+            dlsp: Segment centroidal length array
+            y_pb: Array of segment centroid y-coordinates
+            z_pb: Array of segment centroid z-coordinates
+
+        Returns:
+            Array: Segment centroidal net internal loads
+        """
+        ioz_s, ioy_s, ioz_f, ioy_f = inertias
+        #   C U T    G E O M    M A T R I X    R E F E R E N C E
+        # [
+        #   0 y_bj: OML midpoint y,
+        #   1 z_bj: OML midpoint z,
+        #   2 y_pbj: Centroid y,
+        #   3 z_pbj: Centroid z,
+        #   4 dlsp_j: Segment length,
+        #   5 y_i: Cut y,
+        #   6 z_i: Cut z,
+        #   7 y_p: Cut Centroid y,
+        #   8 z_p: Cut Centroid z,
+        #   9 theta_k: Cut angle
+        # ]
+        # [ y_bj, z_bj, y_pbj, z_pbj, dlsp_j, y_i, z_i, y_p, z_p, theta_k]
+        dlsp_j = cut_geom[:, 4]
+        dlsp = np.mean(dlsp_j)
+        pp = np.sum(dlsp_j)
+        y_pb: ArrayLike = cut_geom[:, 2]
+        z_pb: ArrayLike = cut_geom[:, 3]
+        y: ArrayLike = cut_geom[:, 5]
+        z: ArrayLike = cut_geom[:, 6]
+        y_b: ArrayLike = cut_geom[:, 0]
+        z_b: ArrayLike = cut_geom[:, 1]
+        y_p: ArrayLike = cut_geom[:, 7]
+        z_p: ArrayLike = cut_geom[:, 8]
+        jj = len(cut_geom)
+
+        loads_i = np.zeros(3, dtype=np.float32)
+        for i, row in enumerate(cut_geom):
+            vertical_i, horizontal_i, moment_i = self.cut_loads(
+                i=i,
+                jj=jj,
+                theta=row[9],
+                dls=dls,
+                zzf=zzf,
+                ioy_s=ioy_s,
+                ioz_s=ioz_s,
+                y=y,
+                z=z,
+                y_b=y_b,
+                z_b=z_b,
+                y_p=y_p,
+                z_p=z_p,
+            )
+            # Append to an internal loads matrix
+            new_row = np.array([vertical_i, horizontal_i, moment_i])
+            loads_i = np.vstack((loads_i, new_row))
+
+        # Remove the init row (this has no mathematical meaning)
+        loads_i = np.delete(loads_i, (0), axis=0)
+
+        # Assuming ring flexibility is constant, the redundants are resolved
+        # to 3 independent equations.
+        bmo = -np.sum(loads_i[:, 2] * dlsp) / pp
+        ho = -np.sum(loads_i[:, 2] * (z_pb - zzf) * dlsp) / ioy_f
+        vo = -np.sum(loads_i[:, 2] * y_pb * dlsp) / ioz_f
+
+        # Net internal ring bending moment, shear, and axial loads at a segment are now calculated.
+        loads_j = np.zeros(3, dtype=np.float32)
+        for i, row in enumerate(loads_i):
+            if i == len(loads_i) - 1:
+                _k = 0
+            else:
+                _k = i + 1
+            ben = (
+                bmo
+                + vo * y_pb[i]
+                + ho * (z_pb[i] - zzf)
+                + 0.5 * (row[2] + loads_i[_k, 2])
+            )
+            vv = (
+                (vo + (row[0] + loads_i[_k, 0]) / 2) * (y[_k] - y[i])
+                + (ho + (row[1] + loads_i[_k, 1]) / 2) * (z[_k] - z[i])
+            ) / dls
+            aa = (
+                (vo + (row[0] + loads_i[_k, 0]) / 2) * (z[_k] - z[i])
+                + (ho + (row[1] + loads_i[_k, 1]) / 2) * (y[_k] - y[i])
+            ) / dls
+            loads_j = np.vstack((loads_j, np.array([vv, aa, ben])))
+
+        # Remove the init row (this has no mathematical meaning)
+        loads_j = np.delete(loads_j, (0), axis=0)
+
+        return loads_j
+
+    def sizing(
+        self, vv: float, aa: float, ben: float, dlsp: float, k: float = 0.9
+    ) -> float:
+        """Sizing approach for a segment. [SFOAWE].
+
+        The sizing approach assumes shear resistant webs with the caps determined
+        by material allowable and flange crippling. Frame stiffeners are assumed to
+        be one gage greater than the web gage (+.005"). Ring segments are sized for
+        each external load condition. Since each load condition may be at a different
+        structure design temperature, material properties at the appropriate
+        condition are used.
+
+        Args:
+            vv : Beam shear at the center of the segment
+            aa : Beam axial load (at neutral axis)
+            ben : Bending of the segment
+            dlsp : Segment linear length (at neutral axis)
+            fd : Frame depth at the segment
+            k : Reduction factor (default 0.9)
+
+        Returns:
+            weight: float of frame segment weight
+            results: dict of resulting dimensions
+        """
+        # Area required from bending strength
+        # Criteria: No Yield at Limit
+        fa = abs(ben / self.fd) + abs(aa / 2)
+        cap_area_bend = fa / (k * self.material.F_cy)
+        # print(f"Cap area for bending = {cap_area_bend:.2f} [in2]")
+
+        # Area required from flange crippling
+        # Criteria: Equate strength and applied crippling stress
+        k_c = 0.426
+        tcap = np.sqrt(
+            cap_area_bend
+            / 2
+            * np.sqrt(
+                k
+                * self.material.F_cy
+                * 12
+                * (1 - self.material.nu**2)
+                / (k_c * np.pi**2 * self.material.E)
+            )
+        )
+        # print(f"Cap thickness = {tcap:.2f} [in2]")
+
+        # Using these, now solve for required cap width.
+        # Assume only caps react bending.
+        bb_2 = cap_area_bend / (2 * tcap)
+
+        # Web thickness based on shear strength
+        k_s = 7.5
+        t_w_str = abs(vv) / (self.fd * self.material.F_su)
+
+        # Web thickness based on shear resistance
+        t_w_res = (
+            abs(vv)
+            * self.fd
+            * 12
+            * (1 - self.material.nu**2)
+            / (k_s * np.pi**2 * self.material.E)
+        ) ** (1 / 3)
+
+        # Final value of web thickness
+        t_w = max(t_w_str, t_w_res, tcap / 2)
+
+        # The 5 thal is for stiffener thickness
+        # Assumption is taking section cuts where 1 stiffener per segment.
+        # When you stack them all together, each segment will be "bounded" by stiffeners
+        volume = (bb_2 * (t_w + 0.005)) + (2 * bb_2 * tcap) + (self.fd * t_w)
+        weight = self.material.rho * dlsp * volume
+        results = np.array([weight, tcap, t_w_str, t_w_res])
+        return results
 
 
 @dataclass

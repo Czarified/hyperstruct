@@ -58,7 +58,7 @@ predicated empirical formulas.
 
 These should probably become their own Issues, but they will at least become their own PR's. It's easier to list them all here for now.
 
-- [ ] ForcedCrippling needs it's own class, so MinorFrames, Longerons, and Covers can utilize the same methods without repeating code.
+- [x] ForcedCrippling needs it's own class, so MinorFrames, Longerons, and Covers can utilize the same methods without repeating code.
 - [ ] MajorFrames need their own class for analysis methods.
 - [ ] Fuselage class needs a cut method to generate geometry for analysis by averaging the geometry between defined sections.
 - [ ] How does the Fuselage class define where all the different load points (and therefor MajorFrames) are?
