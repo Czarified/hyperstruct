@@ -1605,6 +1605,10 @@ class MajorFrame(Component):
             def objective(phi, *args) -> float:
                 """An objective local function to minimize.
 
+                Args:
+                    phi: the angle (float)
+                    args: tuple of initial coordinates
+
                 Returns:
                     distance between the previous point and new point.
                 """
@@ -1705,19 +1709,17 @@ class MajorFrame(Component):
             theta: Angle, in radians, of the section cut
             dls: Segment length (float)
             zzf: The Elastic Center (float)
-            dlsp_j: Segment centroidal length (float)
-            inertias: Array of second moments of area
+            ioy_s: Second moment of area for skin y-y (float)
+            ioz_s: Second moment of area for skin z-z (float)
             y: Array of section cut y-coordinates
             z: Array of section cut z-coordinates
             y_b: Array of segment OML y-coordinates
             z_b: Array of segment OML z-coordinates
             y_p: Array of section cut centroid y-coordinates
             z_p: Array of section cut centroid z-coordinates
-            y_pb: Array of segment centroid y-coordinates
-            z_pb: Array of segment centroid z-coordinates
 
         Returns:
-            Array: cut loads [vertical_i, horizontal_i, moment_i]
+            ArrayLike: cut loads [vertical_i, horizontal_i, moment_i]
         """
         total_v = np.sum(self.loads[:, 2])
         total_h = np.sum(self.loads[:, 3])
@@ -1822,15 +1824,13 @@ class MajorFrame(Component):
         up the final redundants, along with centroidal load values for each segment.
 
         Args:
+            dls: Segment length (float)
             zzf: The Elastic Center (float)
             inertias: Array of second moments of area
             cut_geom: 2D Array of section geometry
-            dlsp: Segment centroidal length array
-            y_pb: Array of segment centroid y-coordinates
-            z_pb: Array of segment centroid z-coordinates
 
         Returns:
-            Array: Segment centroidal net internal loads
+            ArrayLike: Segment centroidal net internal loads
         """
         ioz_s, ioy_s, ioz_f, ioy_f = inertias
         #   C U T    G E O M    M A T R I X    R E F E R E N C E
@@ -1920,7 +1920,7 @@ class MajorFrame(Component):
 
     def sizing(
         self, vv: float, aa: float, ben: float, dlsp: float, k: float = 0.9
-    ) -> float:
+    ) -> ArrayLike:
         """Sizing approach for a segment. [SFOAWE].
 
         The sizing approach assumes shear resistant webs with the caps determined
@@ -1935,12 +1935,10 @@ class MajorFrame(Component):
             aa : Beam axial load (at neutral axis)
             ben : Bending of the segment
             dlsp : Segment linear length (at neutral axis)
-            fd : Frame depth at the segment
             k : Reduction factor (default 0.9)
 
         Returns:
-            weight: float of frame segment weight
-            results: dict of resulting dimensions
+            ArrayLike: resulting dimensions
         """
         # Area required from bending strength
         # Criteria: No Yield at Limit
