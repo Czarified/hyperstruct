@@ -468,9 +468,6 @@ class Station:
 
         Returns:
             tuple of the desired intersection point
-
-        Raises:
-            ValueError: If no intersection.
         """
         if debug:
             print(f"    x_1 = {x_1:.2f}")
@@ -571,9 +568,6 @@ class Station:
 
         Returns:
             Tuple of coordinates as floats, for example (x, y)
-
-        Raises:
-            ValueError: Radius value impossibly defined.
         """
         if self.is_ellipse:
             # Calculate the eccentricity
