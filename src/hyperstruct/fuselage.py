@@ -1602,8 +1602,12 @@ class MajorFrame(Component):
             # iteration step segment length.
             # Initial dsl_k doesn't matter.
 
-            def objective(phi, *args):
-                """An objective local function to minimize."""
+            def objective(phi, *args) -> float:
+                """An objective local function to minimize.
+
+                Returns:
+                    distance between the previous point and new point.
+                """
                 y_i, z_i = args
                 y_k, z_k = self.geom.get_coords(phi)
                 del_y = y_k - y_i

@@ -222,6 +222,7 @@ if __name__ == "__main__":  # pragma: no cover
     geom_df["theta_kdeg"] = np.degrees(geom_df.theta_k)
     print("Geometry Cut Table")
     print(geom_df)
+    geom_df.to_csv("geom.csv")
 
     dls = (frm.geom.upper_panel + frm.geom.side_panel + frm.geom.lower_panel) / num
     dlsp = np.mean(cuts[:, 4])
@@ -233,6 +234,7 @@ if __name__ == "__main__":  # pragma: no cover
     loads = pd.DataFrame(
         frm.frame_loads(dls, zzf, inertias, cuts), columns=["shear", "axial", "bending"]
     )
+    loads.to_csv("loads.csv")
     print(loads)
     print("")
 
@@ -242,7 +244,7 @@ if __name__ == "__main__":  # pragma: no cover
     print(sizing)
     print(f"Frame weight = {frm.weight:.1f} [lbs]")
 
-    _ = frm.show(show_coords=True, save=True)
+    _ = frm.show(show_coords=True, save=False)
 
     # Sweep over number of cuts to observe the prediction sensitivity
     nums = np.linspace(15, 90, dtype=int, num=25)
