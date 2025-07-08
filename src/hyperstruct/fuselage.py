@@ -14,6 +14,7 @@ from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 from numpy.typing import ArrayLike
@@ -1403,7 +1404,9 @@ class MajorFrame(Component):
     def show(self, show_coords: bool = False, save: bool = False) -> None:
         """Plot the frame and applied loads."""
         if show_coords:
-            coords = [(row[5], row[6]) for row in self.cuts]
+            # coords = [(row[5], row[6]) for row in self.cuts]
+            xy = np.array(self.cuts[["y_i", "z_i"]])
+            coords = [(row[0], row[1]) for row in xy]
             fig, ax = self.geom.show(coords, display=False)
         else:
             fig, ax = self.geom.show(display=False)
@@ -1531,7 +1534,7 @@ class MajorFrame(Component):
         # Calculate internal frame loads
         loads_j = self.frame_loads(dls, zzf, inertias, cut_geom)
         # Use the average segment neutral axis length
-        dlsp = np.mean(cut_geom[:, 4])
+        dlsp = cut_geom["DLSP_j"].mean()
 
         # Final structural synthesis
         self.results = np.zeros(4)
@@ -1568,7 +1571,7 @@ class MajorFrame(Component):
         Returns:
             zzf: Elastic Center
             inertias: Inertias array
-            cut_geom: cut_geometry matrix, where each row is a segment and columns are
+            cut_geom: cut_geometry dataframe, where each row is a segment and columns are
                 [
                     0 y_bj: OML midpoint y,
                     1 z_bj: OML midpoint z,
@@ -1588,7 +1591,7 @@ class MajorFrame(Component):
         dls = perimeter / num
 
         # Initialize the cut matrix
-        cut_geom = np.zeros(10, dtype=np.float32)
+        cut_geom = np.zeros(6, dtype=np.float32)
 
         # Our first cut starts at the top dead center of the station
         theta_i = 0.0
@@ -1635,30 +1638,8 @@ class MajorFrame(Component):
                 print(f"     theta_i = {np.degrees(theta_i):.2f}deg")
                 print(f"     theta_k = {np.degrees(theta_k):.2f}deg")
 
-            # Calculate the shell midpoint
-            y_bj = np.average([y_i, y_k])
-            z_bj = np.average([z_i, z_k])
-
-            # Calculate the centroidal coordiantes of the segment
-            r_i = z_i / np.cos(theta_i)
-            r_p = r_i - self.fd / 2
-            # At beginning
-            y_p = r_p * np.sin(theta_i)
-            z_p = r_p * np.cos(theta_i)
-            # At end
-            y_pk = r_p * np.sin(theta_k)
-            z_pk = r_p * np.cos(theta_k)
-            # At the midpoint
-            y_pbj = np.average([y_p, y_pk])
-            z_pbj = np.average([z_p, z_pk])
-
-            # Length of the frame
-            dlsp_j = np.sqrt((y_pk - y_p) ** 2 + (z_pk - z_p) ** 2)
-
             # Geometry collection
-            new_row = np.array(
-                [y_bj, z_bj, y_pbj, z_pbj, dlsp_j, y_i, z_i, y_p, z_p, theta_k]
-            )
+            new_row = np.array([theta_i, theta_k, y_i, z_i, y_k, z_k])
             cut_geom = np.vstack((cut_geom, new_row))
 
             # Next cut start is this cut's end
@@ -1666,18 +1647,69 @@ class MajorFrame(Component):
 
         # Remove the init row (this has no mathematical meaning)
         cut_geom = np.delete(cut_geom, (0), axis=0)
+
+        # Convert to dataFrame for the rest of the calculations
+        cut_geom = pd.DataFrame(
+            cut_geom, columns=["theta_i", "theta_k", "y_i", "z_i", "y_k", "z_k"]
+        )
+        cut_geom["theta_i_deg"] = np.degrees(cut_geom["theta_i"])
+        cut_geom["theta_k_deg"] = np.degrees(cut_geom["theta_k"])
+        cut_geom["y_bj"] = cut_geom[["y_i", "y_k"]].apply(np.mean, axis=1)
+        cut_geom["z_bj"] = cut_geom[["z_i", "z_k"]].apply(np.mean, axis=1)
+        cut_geom["DLS_j"] = np.sqrt(
+            (cut_geom["y_k"] - cut_geom["y_i"]) ** 2
+            + (cut_geom["z_k"] - cut_geom["z_i"]) ** 2
+        )
+        # _vi is the radial distance from station centroid to the segment neutral axis start
+        cut_geom["_vi"] = (
+            np.sqrt(
+                (cut_geom["y_i"] - 0) ** 2
+                + (cut_geom["z_i"] - self.geom.vertical_centroid) ** 2
+            )
+            - self.fd / 2
+        )
+        # _vi is at the segment end
+        cut_geom["_vk"] = (
+            np.sqrt(
+                (cut_geom["y_k"] - 0) ** 2
+                + (cut_geom["z_k"] - self.geom.vertical_centroid) ** 2
+            )
+            - self.fd / 2
+        )
+
+        # y_pi, z_pi is the neutral axis start
+        cut_geom["y_pi"] = cut_geom["_vi"] * np.sin(cut_geom["theta_i"])
+        cut_geom["z_pi"] = (
+            cut_geom["_vi"] * np.cos(cut_geom["theta_i"]) + self.geom.vertical_centroid
+        )
+        # y_pk, z_pk is the neutral axis end
+        cut_geom["y_pk"] = cut_geom["_vk"] * np.sin(cut_geom["theta_k"])
+        cut_geom["z_pk"] = (
+            cut_geom["_vk"] * np.cos(cut_geom["theta_k"]) + self.geom.vertical_centroid
+        )
+        cut_geom["y_pbj"] = cut_geom[["y_pi", "y_pk"]].apply(np.mean, axis=1)
+        cut_geom["z_pbj"] = cut_geom[["z_pi", "z_pk"]].apply(np.mean, axis=1)
+        cut_geom["DLSP_j"] = np.sqrt(
+            (cut_geom["y_pk"] - cut_geom["y_pi"]) ** 2
+            + (cut_geom["z_pk"] - cut_geom["z_pi"]) ** 2
+        )
+
         # The elastic center
-        zzf = np.sum(cut_geom[:, 1]) * dls / perimeter
+        zzf = np.sum(cut_geom["z_bj"] * cut_geom["DLS_j"]) / cut_geom["DLS_j"].sum()
         # Section second moment of areas
         # Of the shell
-        ioz_s = np.sum(cut_geom[:, 0]) ** 2 * dls
-        ioy_s = (np.sum(cut_geom[:, 1]) - zzf) ** 2 * dls
+        ioz_s = np.sum(cut_geom["y_bj"] ** 2 * cut_geom["DLS_j"])
+        ioy_s = np.sum((cut_geom["z_bj"] - zzf) ** 2 * cut_geom["DLS_j"])
         # Of the frame
-        ioz_f = np.sum(cut_geom[:, 2]) ** 2 * dls
-        ioy_f = (np.sum(cut_geom[:, 3]) - zzf) ** 2 * np.sum(cut_geom[:, 4])
-
+        ioz_f = np.sum(cut_geom["y_pbj"] ** 2 * cut_geom["DLSP_j"])
+        ioy_f = np.sum((cut_geom["z_pbj"] - zzf) ** 2 * cut_geom["DLSP_j"])
         inertias = np.array([ioz_s, ioy_s, ioz_f, ioy_f])
         self.cuts = cut_geom
+
+        if debug:
+            print(cut_geom)
+            print(f"zzf = {zzf:.3f}")
+            print(inertias)
 
         return zzf, inertias, cut_geom
 
@@ -1847,26 +1879,27 @@ class MajorFrame(Component):
         #   9 theta_k: Cut angle
         # ]
         # [ y_bj, z_bj, y_pbj, z_pbj, dlsp_j, y_i, z_i, y_p, z_p, theta_k]
-        dlsp_j = cut_geom[:, 4]
-        dlsp = np.mean(dlsp_j)
+        dlsp_j = cut_geom["DLSP_j"]
+        dlsp = cut_geom["DLS_j"]
         pp = np.sum(dlsp_j)
-        y_pb: ArrayLike = cut_geom[:, 2]
-        z_pb: ArrayLike = cut_geom[:, 3]
-        y: ArrayLike = cut_geom[:, 5]
-        z: ArrayLike = cut_geom[:, 6]
-        y_b: ArrayLike = cut_geom[:, 0]
-        z_b: ArrayLike = cut_geom[:, 1]
-        y_p: ArrayLike = cut_geom[:, 7]
-        z_p: ArrayLike = cut_geom[:, 8]
+        y_pb: ArrayLike = np.array(cut_geom["y_pbj"])
+        z_pb: ArrayLike = np.array(cut_geom["z_pbj"])
+        y: ArrayLike = np.array(cut_geom["y_i"])
+        z: ArrayLike = np.array(cut_geom["z_i"])
+        y_b: ArrayLike = np.array(cut_geom["y_bj"])
+        z_b: ArrayLike = np.array(cut_geom["z_bj"])
+        y_p: ArrayLike = np.array(cut_geom["y_pi"])
+        z_p: ArrayLike = np.array(cut_geom["z_pi"])
+        # theta: ArrayLike = cut_geom["theta_i"]
         jj = len(cut_geom)
 
         loads_i = np.zeros(3, dtype=np.float32)
-        for i, row in enumerate(cut_geom):
+        for i, row in cut_geom.iterrows():
             vertical_i, horizontal_i, moment_i = self.cut_loads(
                 i=i,
                 jj=jj,
-                theta=row[9],
-                dls=dls,
+                theta=row["theta_i"],
+                dls=row["DLS_j"],
                 zzf=zzf,
                 ioy_s=ioy_s,
                 ioz_s=ioz_s,

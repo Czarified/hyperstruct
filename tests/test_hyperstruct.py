@@ -203,40 +203,6 @@ if __name__ == "__main__":  # pragma: no cover
     # coords = [(y, z)]
 
     num = 25
-    zzf, inertias, cuts = frm.geometry_cuts(num, debug=False)
-    geom_df = pd.DataFrame(
-        cuts,
-        columns=[
-            "y_bj",
-            "z_bj",
-            "y_pbj",
-            "z_pbj",
-            "dlsp_j",
-            "y_i",
-            "z_i",
-            "y_p",
-            "z_p",
-            "theta_k",
-        ],
-    )
-    geom_df["theta_kdeg"] = np.degrees(geom_df.theta_k)
-    print("Geometry Cut Table")
-    print(geom_df)
-    geom_df.to_csv("geom.csv")
-
-    dls = (frm.geom.upper_panel + frm.geom.side_panel + frm.geom.lower_panel) / num
-    dlsp = np.mean(cuts[:, 4])
-    print(f" DLS = {dls:.1f}[in]")
-    print(f"DLSP = {dlsp:.1f}[in]")
-    print("")
-
-    print("Internal Loads Table:")
-    loads = pd.DataFrame(
-        frm.frame_loads(dls, zzf, inertias, cuts), columns=["shear", "axial", "bending"]
-    )
-    loads.to_csv("loads.csv")
-    print(loads)
-    print("")
 
     frm.synthesis(num)
     sizing = pd.DataFrame(frm.results, columns=["w_j", "tcap", "t_w_str", "t_w_res"])
