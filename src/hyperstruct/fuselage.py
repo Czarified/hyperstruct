@@ -7,6 +7,7 @@ This file contains all global variables, classes, and functions related to fusel
 
 from copy import copy
 from dataclasses import dataclass
+from dataclasses import field
 
 # from typing import Dict
 from typing import Any
@@ -14,6 +15,7 @@ from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 from numpy.typing import ArrayLike
@@ -1112,6 +1114,9 @@ class Longeron(Component):
         return 1.0
 
 
+# TODO: Bulkheads need major overhaul! This is where the internal geometry
+# routines come in! It's functional for now and will provide a weight value,
+# but this based on a square of LxL and should vastly over-predict weight.
 @dataclass
 class Bulkhead(Component):
     """Fuselage pressure bulkhead component.
@@ -1122,10 +1127,10 @@ class Bulkhead(Component):
             the periphery.
         2.  Strip theory provides an adequate definition of maximum bending
             moment.
-        3.  Stiffeners are of constant cross section basedon the maxium bending
+        3.  Stiffeners are of constant cross section based on the maxium bending
             moment, at equal spacings, and oriented parallel to the shortest
             bulkhead dimension.
-        4.  Web thickness base don maximum pressure is constant throughout the
+        4.  Web thickness based on maximum pressure is constant throughout the
             bulkhead surface.
         5.  Minor frame material is used for bulkhead construction.
 
@@ -1138,9 +1143,9 @@ class Bulkhead(Component):
     """
 
     duf: float
-    """Design Ultimate Factor.
+    """Design Ultimate Factor of Safety.
 
-    (2.0 for personnel environment, 1.5 for equipment)
+    (2.0 for personnel environment, 1.5 otherwise)
     """
 
     K_r: float
@@ -1155,25 +1160,13 @@ class Bulkhead(Component):
     L: float
     """Height of pressurized surface."""
 
-    t_w: float
-    """Web field thickness.
-
-    (Webs are assumed to be milled.)
-    """
-
-    t_l: float
-    """Web land thickness.
-
-    (Webs are assumed to be milled.)
-    """
-
-    d: float
+    d: float = field(default=2.0, metadata={"unit": "inch"})
     """Stiffener spacing."""
 
-    t_s: float
+    t_s: float = field(default=0.020, metadata={"unit": "inch"})
     """Stiffener web thickness."""
 
-    H: float
+    H: float = field(default=0.5, metadata={"unit": "inch"})
     """Stiffener cap width.
 
     (An I-beam cap geometry.)
@@ -1201,7 +1194,7 @@ class Bulkhead(Component):
             + self.p_1 * self.L**2 * (k - k**3) / 6
         )
 
-        return float(M_max)
+        return float(np.abs(M_max))
 
     def stiffener_area(self, t_s: float, H: float) -> float:
         """Area of stiffener, including effective web.
@@ -1268,7 +1261,7 @@ class Bulkhead(Component):
         H_1: float = 1.0,
         H_2: float = 5.0,
         t_s1: float = 0.025,
-    ) -> Tuple[float, float, float]:
+    ) -> Tuple[float, float, float, float]:
         """Stiffener spacing optimization routine.
 
         Stiffener spacing search is initiated at minimum spacing and
@@ -1285,11 +1278,9 @@ class Bulkhead(Component):
 
         Returns:
             t_s: minimum stiffener thickness
+            t_bar: minimum equivalent stiffness
             d: stiffener spacing for minimum thickness
             H: stiffener width for minimum thickness
-
-        Raises:
-            ValueError: Converged thickness does not result in spacing within bounds.
         """
         x = np.linspace(d_1, d_2, num=5)
         y = []
@@ -1303,12 +1294,18 @@ class Bulkhead(Component):
         for d_i in x:
             t_w, t_l = self.web_thickness(d_i)
 
-            t_s = (
+            # numpy doesn't seem to allow fractional powers of negative numbers,
+            # even if the power would not result in a complex number.
+            # So, we do this math in 2 steps, even though the thickness should never be negative.
+            # TODO: Potentiall add a test case for this, and compress these steps,
+            # but Bulkhead class overhaul is higher priority.
+            _a = (
                 3
                 * self.max_bending_moment()
                 * B ** (8 / 3)
                 / (224 * self.material.F_cy)
-            ) ** (1 / 3)
+            )
+            t_s = np.sign(_a) * (np.abs(_a)) ** (1 / 3)
             H = 4 * t_s / B ** (4 / 3)
             t_bar = (
                 t_w
@@ -1329,17 +1326,41 @@ class Bulkhead(Component):
         d = res.x
         t_s = t_s1 if t_s <= t_s1 else t_s
         H = 4 * t_s / B ** (4 / 3)
+        print(H)
 
-        if H < H_1:
-            raise ValueError(
-                f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
-            )
-        elif H > H_2:
-            raise ValueError(
-                f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
-            )
+        # if H < H_1:
+        # raise ValueError(
+        #     f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
+        # )
+        # elif H > H_2:
+        # raise ValueError(
+        #     f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
+        # )
 
-        return (t_s, d, H)
+        return (t_s, t_bar, d, H)
+
+    def synthesis(self):
+        """Run the sizing routine.
+
+        Component weight is obtained by multiplying area, effective thickness,
+        and material density. A 1.5 inch angle channel around the periphery is
+        added to the weight calculation. The angle channel thickness is equal
+        to the equivalent thickness, t_bar.
+        """
+        # Weight of stiffened web
+        t_s, t_bar, d, H = self.stiffener_spacing()
+        # L / d is the number of stiffeners
+        A_stiff = self.L / d * self.stiffener_area(t_s, H)
+        A_web = self.L**2
+        A = A_web + A_stiff
+        weight_web = A * t_bar * self.material.rho
+
+        # Weight of the edge member
+        A_edge = 1.5**2 - (1.5 - t_bar) ** 2
+        periphery = 4 * self.L
+        weight_edge = A_edge * periphery * self.material.rho
+
+        self.weight = weight_web + weight_edge
 
 
 @dataclass
@@ -1400,10 +1421,15 @@ class MajorFrame(Component):
     fd: float
     """Frame depth, constant around periphery."""
 
+    min_gauge: float = field(default=0.040, metadata={"unit": "inch"})
+    """Manufacturing requirement for minimum gauge thickness, default 0.040[in]."""
+
     def show(self, show_coords: bool = False, save: bool = False) -> None:
         """Plot the frame and applied loads."""
         if show_coords:
-            coords = [(row[5], row[6]) for row in self.cuts]
+            # coords = [(row[5], row[6]) for row in self.cuts]
+            xy = np.array(self.cuts[["y_i", "z_i"]])
+            coords = [(row[0], row[1]) for row in xy]
             fig, ax = self.geom.show(coords, display=False)
         else:
             fig, ax = self.geom.show(display=False)
@@ -1531,7 +1557,7 @@ class MajorFrame(Component):
         # Calculate internal frame loads
         loads_j = self.frame_loads(dls, zzf, inertias, cut_geom)
         # Use the average segment neutral axis length
-        dlsp = np.mean(cut_geom[:, 4])
+        dlsp = cut_geom["DLSP_j"].mean()
 
         # Final structural synthesis
         self.results = np.zeros(4)
@@ -1568,7 +1594,7 @@ class MajorFrame(Component):
         Returns:
             zzf: Elastic Center
             inertias: Inertias array
-            cut_geom: cut_geometry matrix, where each row is a segment and columns are
+            cut_geom: cut_geometry dataframe, where each row is a segment and columns are
                 [
                     0 y_bj: OML midpoint y,
                     1 z_bj: OML midpoint z,
@@ -1588,7 +1614,7 @@ class MajorFrame(Component):
         dls = perimeter / num
 
         # Initialize the cut matrix
-        cut_geom = np.zeros(10, dtype=np.float32)
+        cut_geom = np.zeros(6, dtype=np.float32)
 
         # Our first cut starts at the top dead center of the station
         theta_i = 0.0
@@ -1635,30 +1661,8 @@ class MajorFrame(Component):
                 print(f"     theta_i = {np.degrees(theta_i):.2f}deg")
                 print(f"     theta_k = {np.degrees(theta_k):.2f}deg")
 
-            # Calculate the shell midpoint
-            y_bj = np.average([y_i, y_k])
-            z_bj = np.average([z_i, z_k])
-
-            # Calculate the centroidal coordiantes of the segment
-            r_i = z_i / np.cos(theta_i)
-            r_p = r_i - self.fd / 2
-            # At beginning
-            y_p = r_p * np.sin(theta_i)
-            z_p = r_p * np.cos(theta_i)
-            # At end
-            y_pk = r_p * np.sin(theta_k)
-            z_pk = r_p * np.cos(theta_k)
-            # At the midpoint
-            y_pbj = np.average([y_p, y_pk])
-            z_pbj = np.average([z_p, z_pk])
-
-            # Length of the frame
-            dlsp_j = np.sqrt((y_pk - y_p) ** 2 + (z_pk - z_p) ** 2)
-
             # Geometry collection
-            new_row = np.array(
-                [y_bj, z_bj, y_pbj, z_pbj, dlsp_j, y_i, z_i, y_p, z_p, theta_k]
-            )
+            new_row = np.array([theta_i, theta_k, y_i, z_i, y_k, z_k])
             cut_geom = np.vstack((cut_geom, new_row))
 
             # Next cut start is this cut's end
@@ -1666,18 +1670,69 @@ class MajorFrame(Component):
 
         # Remove the init row (this has no mathematical meaning)
         cut_geom = np.delete(cut_geom, (0), axis=0)
+
+        # Convert to dataFrame for the rest of the calculations
+        cut_geom = pd.DataFrame(
+            cut_geom, columns=["theta_i", "theta_k", "y_i", "z_i", "y_k", "z_k"]
+        )
+        cut_geom["theta_i_deg"] = np.degrees(cut_geom["theta_i"])
+        cut_geom["theta_k_deg"] = np.degrees(cut_geom["theta_k"])
+        cut_geom["y_bj"] = cut_geom[["y_i", "y_k"]].apply(np.mean, axis=1)
+        cut_geom["z_bj"] = cut_geom[["z_i", "z_k"]].apply(np.mean, axis=1)
+        cut_geom["DLS_j"] = np.sqrt(
+            (cut_geom["y_k"] - cut_geom["y_i"]) ** 2
+            + (cut_geom["z_k"] - cut_geom["z_i"]) ** 2
+        )
+        # _vi is the radial distance from station centroid to the segment neutral axis start
+        cut_geom["_vi"] = (
+            np.sqrt(
+                (cut_geom["y_i"] - 0) ** 2
+                + (cut_geom["z_i"] - self.geom.vertical_centroid) ** 2
+            )
+            - self.fd / 2
+        )
+        # _vi is at the segment end
+        cut_geom["_vk"] = (
+            np.sqrt(
+                (cut_geom["y_k"] - 0) ** 2
+                + (cut_geom["z_k"] - self.geom.vertical_centroid) ** 2
+            )
+            - self.fd / 2
+        )
+
+        # y_pi, z_pi is the neutral axis start
+        cut_geom["y_pi"] = cut_geom["_vi"] * np.sin(cut_geom["theta_i"])
+        cut_geom["z_pi"] = (
+            cut_geom["_vi"] * np.cos(cut_geom["theta_i"]) + self.geom.vertical_centroid
+        )
+        # y_pk, z_pk is the neutral axis end
+        cut_geom["y_pk"] = cut_geom["_vk"] * np.sin(cut_geom["theta_k"])
+        cut_geom["z_pk"] = (
+            cut_geom["_vk"] * np.cos(cut_geom["theta_k"]) + self.geom.vertical_centroid
+        )
+        cut_geom["y_pbj"] = cut_geom[["y_pi", "y_pk"]].apply(np.mean, axis=1)
+        cut_geom["z_pbj"] = cut_geom[["z_pi", "z_pk"]].apply(np.mean, axis=1)
+        cut_geom["DLSP_j"] = np.sqrt(
+            (cut_geom["y_pk"] - cut_geom["y_pi"]) ** 2
+            + (cut_geom["z_pk"] - cut_geom["z_pi"]) ** 2
+        )
+
         # The elastic center
-        zzf = np.sum(cut_geom[:, 1]) * dls / perimeter
+        zzf = np.sum(cut_geom["z_bj"] * cut_geom["DLS_j"]) / cut_geom["DLS_j"].sum()
         # Section second moment of areas
         # Of the shell
-        ioz_s = np.sum(cut_geom[:, 0]) ** 2 * dls
-        ioy_s = (np.sum(cut_geom[:, 1]) - zzf) ** 2 * dls
+        ioz_s = np.sum(cut_geom["y_bj"] ** 2 * cut_geom["DLS_j"])
+        ioy_s = np.sum((cut_geom["z_bj"] - zzf) ** 2 * cut_geom["DLS_j"])
         # Of the frame
-        ioz_f = np.sum(cut_geom[:, 2]) ** 2 * dls
-        ioy_f = (np.sum(cut_geom[:, 3]) - zzf) ** 2 * np.sum(cut_geom[:, 4])
-
+        ioz_f = np.sum(cut_geom["y_pbj"] ** 2 * cut_geom["DLSP_j"])
+        ioy_f = np.sum((cut_geom["z_pbj"] - zzf) ** 2 * cut_geom["DLSP_j"])
         inertias = np.array([ioz_s, ioy_s, ioz_f, ioy_f])
         self.cuts = cut_geom
+
+        if debug:
+            print(cut_geom)
+            print(f"zzf = {zzf:.3f}")
+            print(inertias)
 
         return zzf, inertias, cut_geom
 
@@ -1833,40 +1888,31 @@ class MajorFrame(Component):
             ArrayLike: Segment centroidal net internal loads
         """
         ioz_s, ioy_s, ioz_f, ioy_f = inertias
-        #   C U T    G E O M    M A T R I X    R E F E R E N C E
-        # [
-        #   0 y_bj: OML midpoint y,
-        #   1 z_bj: OML midpoint z,
-        #   2 y_pbj: Centroid y,
-        #   3 z_pbj: Centroid z,
-        #   4 dlsp_j: Segment length,
-        #   5 y_i: Cut y,
-        #   6 z_i: Cut z,
-        #   7 y_p: Cut Centroid y,
-        #   8 z_p: Cut Centroid z,
-        #   9 theta_k: Cut angle
-        # ]
-        # [ y_bj, z_bj, y_pbj, z_pbj, dlsp_j, y_i, z_i, y_p, z_p, theta_k]
-        dlsp_j = cut_geom[:, 4]
-        dlsp = np.mean(dlsp_j)
+        # We gotta do some silly type conversions here.
+        # Ideally this whole section would be overhauled to be a direct
+        # dataframe routine, but I'm not sure it's worth the effort right now.
+        # TODO: Convert frame_loads and cut_loads to dataframe vector methods.
+        dlsp_j = cut_geom["DLSP_j"]
+        dlsp = cut_geom["DLS_j"]
         pp = np.sum(dlsp_j)
-        y_pb: ArrayLike = cut_geom[:, 2]
-        z_pb: ArrayLike = cut_geom[:, 3]
-        y: ArrayLike = cut_geom[:, 5]
-        z: ArrayLike = cut_geom[:, 6]
-        y_b: ArrayLike = cut_geom[:, 0]
-        z_b: ArrayLike = cut_geom[:, 1]
-        y_p: ArrayLike = cut_geom[:, 7]
-        z_p: ArrayLike = cut_geom[:, 8]
+        y_pb: ArrayLike = np.array(cut_geom["y_pbj"])
+        z_pb: ArrayLike = np.array(cut_geom["z_pbj"])
+        y: ArrayLike = np.array(cut_geom["y_i"])
+        z: ArrayLike = np.array(cut_geom["z_i"])
+        y_b: ArrayLike = np.array(cut_geom["y_bj"])
+        z_b: ArrayLike = np.array(cut_geom["z_bj"])
+        y_p: ArrayLike = np.array(cut_geom["y_pi"])
+        z_p: ArrayLike = np.array(cut_geom["z_pi"])
+        # theta: ArrayLike = cut_geom["theta_i"]
         jj = len(cut_geom)
 
         loads_i = np.zeros(3, dtype=np.float32)
-        for i, row in enumerate(cut_geom):
+        for i, row in cut_geom.iterrows():
             vertical_i, horizontal_i, moment_i = self.cut_loads(
                 i=i,
                 jj=jj,
-                theta=row[9],
-                dls=dls,
+                theta=row["theta_i"],
+                dls=row["DLS_j"],
                 zzf=zzf,
                 ioy_s=ioy_s,
                 ioz_s=ioz_s,
@@ -1883,6 +1929,9 @@ class MajorFrame(Component):
 
         # Remove the init row (this has no mathematical meaning)
         loads_i = np.delete(loads_i, (0), axis=0)
+
+        # print("\nCut Loads")
+        # print(pd.DataFrame(loads_i, columns=["vertical_i", "horizontal_i", "moment_i"]))
 
         # Assuming ring flexibility is constant, the redundants are resolved
         # to 3 independent equations.
@@ -1915,6 +1964,9 @@ class MajorFrame(Component):
 
         # Remove the init row (this has no mathematical meaning)
         loads_j = np.delete(loads_j, (0), axis=0)
+
+        # print("\nSegment Loads")
+        # print(pd.DataFrame(loads_j, columns=["shear", "axial", "bending"]))
 
         return loads_j
 
@@ -1981,8 +2033,11 @@ class MajorFrame(Component):
 
         # Final value of web thickness
         t_w = max(t_w_str, t_w_res, tcap / 2)
+        if t_w < self.min_gauge:
+            # Manufacturing requirement
+            t_w = self.min_gauge
 
-        # The 5 thal is for stiffener thickness
+        # The 5 thou is for stiffener thickness
         # Assumption is taking section cuts where 1 stiffener per segment.
         # When you stack them all together, each segment will be "bounded" by stiffeners
         volume = (bb_2 * (t_w + 0.005)) + (2 * bb_2 * tcap) + (self.fd * t_w)

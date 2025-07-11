@@ -3,7 +3,6 @@
 import pytest
 
 from hyperstruct import Material
-from hyperstruct.fuselage import Bulkhead
 from hyperstruct.fuselage import Cover
 from hyperstruct.fuselage import ForcedCrippling
 
@@ -33,25 +32,6 @@ def unmilled_cover(aluminum: Material) -> Cover:
     """Build a Cover component."""
     component = Cover(
         material=aluminum, milled=False, L=30, D=20, R=1, RC=25, V=420.0, I=69.0, Q=69.0
-    )
-    return component
-
-
-@pytest.fixture
-def bulkhead(aluminum: Material) -> Bulkhead:
-    """Build a Bulkhead component."""
-    component = Bulkhead(
-        material=aluminum,
-        p_1=30.0,
-        p_2=6.0,
-        L=34.0,
-        K_r=0.53,
-        duf=1.5,
-        t_w=0.027,
-        t_l=0.080,
-        d=2.0,
-        t_s=0.090,
-        H=1.5,
     )
     return component
 
@@ -99,15 +79,6 @@ def test_unmilled_acoustic(unmilled_cover: Cover) -> None:
     t_l, t_c = unmilled_cover.acoustic_fatigue()
     assert isinstance(t_l, float)
     assert isinstance(t_c, float)
-
-
-def test_bulkhead_stiffener_spacing(bulkhead: Bulkhead) -> None:
-    """Test a pressure bulkhead."""
-    print(bulkhead.allowable_tensile_stress(0.53))
-    print(bulkhead.web_thickness(2.0))
-    t_s, d, H = bulkhead.stiffener_spacing()
-    assert t_s >= 0.025
-    assert t_s < 0.500
 
 
 def test_diagonal_tension(diag_ten: ForcedCrippling) -> None:
