@@ -7,6 +7,7 @@ This file contains all global variables, classes, and functions related to fusel
 
 from copy import copy
 from dataclasses import dataclass
+from dataclasses import field
 
 # from typing import Dict
 from typing import Any
@@ -1401,6 +1402,9 @@ class MajorFrame(Component):
     fd: float
     """Frame depth, constant around periphery."""
 
+    min_gauge: float = field(default=0.040, metadata={"unit": "inch"})
+    """Manufacturing requirement for minimum gauge thickness, default 0.040[in]."""
+
     def show(self, show_coords: bool = False, save: bool = False) -> None:
         """Plot the frame and applied loads."""
         if show_coords:
@@ -1865,20 +1869,10 @@ class MajorFrame(Component):
             ArrayLike: Segment centroidal net internal loads
         """
         ioz_s, ioy_s, ioz_f, ioy_f = inertias
-        #   C U T    G E O M    M A T R I X    R E F E R E N C E
-        # [
-        #   0 y_bj: OML midpoint y,
-        #   1 z_bj: OML midpoint z,
-        #   2 y_pbj: Centroid y,
-        #   3 z_pbj: Centroid z,
-        #   4 dlsp_j: Segment length,
-        #   5 y_i: Cut y,
-        #   6 z_i: Cut z,
-        #   7 y_p: Cut Centroid y,
-        #   8 z_p: Cut Centroid z,
-        #   9 theta_k: Cut angle
-        # ]
-        # [ y_bj, z_bj, y_pbj, z_pbj, dlsp_j, y_i, z_i, y_p, z_p, theta_k]
+        # We gotta do some silly type conversions here.
+        # Ideally this whole section would be overhauled to be a direct
+        # dataframe routine, but I'm not sure it's worth the effort right now.
+        # TODO: Convert frame_loads and cut_loads to dataframe vector methods.
         dlsp_j = cut_geom["DLSP_j"]
         dlsp = cut_geom["DLS_j"]
         pp = np.sum(dlsp_j)
@@ -1917,6 +1911,9 @@ class MajorFrame(Component):
         # Remove the init row (this has no mathematical meaning)
         loads_i = np.delete(loads_i, (0), axis=0)
 
+        # print("\nCut Loads")
+        # print(pd.DataFrame(loads_i, columns=["vertical_i", "horizontal_i", "moment_i"]))
+
         # Assuming ring flexibility is constant, the redundants are resolved
         # to 3 independent equations.
         bmo = -np.sum(loads_i[:, 2] * dlsp) / pp
@@ -1948,6 +1945,9 @@ class MajorFrame(Component):
 
         # Remove the init row (this has no mathematical meaning)
         loads_j = np.delete(loads_j, (0), axis=0)
+
+        # print("\nSegment Loads")
+        # print(pd.DataFrame(loads_j, columns=["shear", "axial", "bending"]))
 
         return loads_j
 
@@ -2014,8 +2014,11 @@ class MajorFrame(Component):
 
         # Final value of web thickness
         t_w = max(t_w_str, t_w_res, tcap / 2)
+        if t_w < self.min_gauge:
+            # Manufacturing requirement
+            t_w = self.min_gauge
 
-        # The 5 thal is for stiffener thickness
+        # The 5 thou is for stiffener thickness
         # Assumption is taking section cuts where 1 stiffener per segment.
         # When you stack them all together, each segment will be "bounded" by stiffeners
         volume = (bb_2 * (t_w + 0.005)) + (2 * bb_2 * tcap) + (self.fd * t_w)
