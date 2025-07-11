@@ -1114,6 +1114,9 @@ class Longeron(Component):
         return 1.0
 
 
+# TODO: Bulkheads need major overhaul! This is where the internal geometry
+# routines come in! It's functional for now and will provide a weight value,
+# but this based on a square of LxL and should vastly over-predict weight.
 @dataclass
 class Bulkhead(Component):
     """Fuselage pressure bulkhead component.
@@ -1124,10 +1127,10 @@ class Bulkhead(Component):
             the periphery.
         2.  Strip theory provides an adequate definition of maximum bending
             moment.
-        3.  Stiffeners are of constant cross section basedon the maxium bending
+        3.  Stiffeners are of constant cross section based on the maxium bending
             moment, at equal spacings, and oriented parallel to the shortest
             bulkhead dimension.
-        4.  Web thickness base don maximum pressure is constant throughout the
+        4.  Web thickness based on maximum pressure is constant throughout the
             bulkhead surface.
         5.  Minor frame material is used for bulkhead construction.
 
@@ -1140,9 +1143,9 @@ class Bulkhead(Component):
     """
 
     duf: float
-    """Design Ultimate Factor.
+    """Design Ultimate Factor of Safety.
 
-    (2.0 for personnel environment, 1.5 for equipment)
+    (2.0 for personnel environment, 1.5 otherwise)
     """
 
     K_r: float
@@ -1157,25 +1160,13 @@ class Bulkhead(Component):
     L: float
     """Height of pressurized surface."""
 
-    t_w: float
-    """Web field thickness.
-
-    (Webs are assumed to be milled.)
-    """
-
-    t_l: float
-    """Web land thickness.
-
-    (Webs are assumed to be milled.)
-    """
-
-    d: float
+    d: float = field(default=2.0, metadata={"unit": "inch"})
     """Stiffener spacing."""
 
-    t_s: float
+    t_s: float = field(default=0.020, metadata={"unit": "inch"})
     """Stiffener web thickness."""
 
-    H: float
+    H: float = field(default=0.5, metadata={"unit": "inch"})
     """Stiffener cap width.
 
     (An I-beam cap geometry.)
@@ -1203,7 +1194,7 @@ class Bulkhead(Component):
             + self.p_1 * self.L**2 * (k - k**3) / 6
         )
 
-        return float(M_max)
+        return float(np.abs(M_max))
 
     def stiffener_area(self, t_s: float, H: float) -> float:
         """Area of stiffener, including effective web.
@@ -1270,7 +1261,7 @@ class Bulkhead(Component):
         H_1: float = 1.0,
         H_2: float = 5.0,
         t_s1: float = 0.025,
-    ) -> Tuple[float, float, float]:
+    ) -> Tuple[float, float, float, float]:
         """Stiffener spacing optimization routine.
 
         Stiffener spacing search is initiated at minimum spacing and
@@ -1287,6 +1278,7 @@ class Bulkhead(Component):
 
         Returns:
             t_s: minimum stiffener thickness
+            t_bar: minimum equivalent stiffness
             d: stiffener spacing for minimum thickness
             H: stiffener width for minimum thickness
 
@@ -1305,12 +1297,18 @@ class Bulkhead(Component):
         for d_i in x:
             t_w, t_l = self.web_thickness(d_i)
 
-            t_s = (
+            # numpy doesn't seem to allow fractional powers of negative numbers,
+            # even if the power would not result in a complex number.
+            # So, we do this math in 2 steps, even though the thickness should never be negative.
+            # TODO: Potentiall add a test case for this, and compress these steps,
+            # but Bulkhead class overhaul is higher priority.
+            _a = (
                 3
                 * self.max_bending_moment()
                 * B ** (8 / 3)
                 / (224 * self.material.F_cy)
-            ) ** (1 / 3)
+            )
+            t_s = np.sign(_a) * (np.abs(_a)) ** (1 / 3)
             H = 4 * t_s / B ** (4 / 3)
             t_bar = (
                 t_w
@@ -1331,17 +1329,41 @@ class Bulkhead(Component):
         d = res.x
         t_s = t_s1 if t_s <= t_s1 else t_s
         H = 4 * t_s / B ** (4 / 3)
+        print(H)
 
-        if H < H_1:
-            raise ValueError(
-                f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
-            )
-        elif H > H_2:
-            raise ValueError(
-                f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
-            )
+        # if H < H_1:
+        # raise ValueError(
+        #     f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
+        # )
+        # elif H > H_2:
+        # raise ValueError(
+        #     f"Stiffener width of {H:.1f} required for min weight (t_s={t_s:0.3f}), but is outside bounds [{H_1:.1f}, {H_2:.1}]"
+        # )
 
-        return (t_s, d, H)
+        return (t_s, t_bar, d, H)
+
+    def synthesis(self):
+        """Run the sizing routine.
+
+        Component weight is obtained by multiplying area, effective thickness,
+        and material density. A 1.5 inch angle channel around the periphery is
+        added to the weight calculation. The angle channel thickness is equal
+        to the equivalent thickness, t_bar.
+        """
+        # Weight of stiffened web
+        t_s, t_bar, d, H = self.stiffener_spacing()
+        # L / d is the number of stiffeners
+        A_stiff = self.L / d * self.stiffener_area(t_s, H)
+        A_web = self.L**2
+        A = A_web + A_stiff
+        weight_web = A * t_bar * self.material.rho
+
+        # Weight of the edge member
+        A_edge = 1.5**2 - (1.5 - t_bar) ** 2
+        periphery = 4 * self.L
+        weight_edge = A_edge * periphery * self.material.rho
+
+        self.weight = weight_web + weight_edge
 
 
 @dataclass

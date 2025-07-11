@@ -1,4 +1,4 @@
-"""Test cases for the MajorFrame classes."""
+"""Test cases for the MajorFrame and Bulkhead classes."""
 
 import numpy as np
 import pandas as pd
@@ -7,6 +7,7 @@ import pytest_check as pycheck
 
 from hyperstruct import Material
 from hyperstruct import Station
+from hyperstruct.fuselage import Bulkhead
 from hyperstruct.fuselage import MajorFrame
 
 
@@ -67,6 +68,16 @@ def test_frame(aluminum: Material, rounded: Station) -> None:
     pycheck.almost_equal(frame.weight, 60.8, rel=0.1)
 
 
+def test_bulkhead(aluminum: Material) -> None:
+    """Check a basic Bulkhead for functionality."""
+    bulkhead = Bulkhead(material=aluminum, duf=2.0, K_r=0.6, p_1=3.2, p_2=7.1, L=30.0)
+    # Verify we don't have the attribute before synthesis
+    pycheck.is_false(hasattr(bulkhead, "weight"))
+    bulkhead.synthesis()
+    # Check against expected weight after synthesis
+    pycheck.almost_equal(bulkhead.weight, 6, rel=0.1)
+
+
 if __name__ == "__main__":  # pragma: no cover
     # This snippet just verifies the show method and get_coords.
     material = Material(
@@ -93,10 +104,19 @@ if __name__ == "__main__":  # pragma: no cover
         vertical_centroid=30.0,
         radius=24.61,
     )
+    cir = Station(
+        orientation="FS",
+        name="Circle",
+        number=1700.0,
+        width=50.0,
+        depth=50.0,
+        vertical_centroid=30.0,
+        radius=25.0,
+    )
 
     frm = MajorFrame(
         material=material,
-        fs_loc=obj.number,
+        fs_loc=cir.number,
         loads=np.array(
             [
                 # y, z, V, H, M
@@ -104,7 +124,7 @@ if __name__ == "__main__":  # pragma: no cover
                 [-15.0, 56.5, -20876.0, 0.0, 0.0],
             ]
         ),
-        geom=obj,
+        geom=cir,
         fd=6.0,
     )
     print(f"Upper Panel = {frm.geom.upper_panel:.3f}")
