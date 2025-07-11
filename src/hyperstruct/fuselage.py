@@ -1281,9 +1281,6 @@ class Bulkhead(Component):
             t_bar: minimum equivalent stiffness
             d: stiffener spacing for minimum thickness
             H: stiffener width for minimum thickness
-
-        Raises:
-            ValueError: Converged thickness does not result in spacing within bounds.
         """
         x = np.linspace(d_1, d_2, num=5)
         y = []
