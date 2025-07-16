@@ -151,7 +151,7 @@ if __name__ == "__main__":  # pragma: no cover
     print(sizing)
     print(f"Frame weight = {frm.weight:.1f} [lbs]")
 
-    _ = frm.show(show_coords=True, save=False)
+    frm.show(show_coords=True, save=False)
 
     # Sweep over number of cuts to observe the prediction sensitivity
     # nums = np.linspace(15, 90, dtype=int, num=25)

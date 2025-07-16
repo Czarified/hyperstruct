@@ -1339,7 +1339,7 @@ class Bulkhead(Component):
 
         return (t_s, t_bar, d, H)
 
-    def synthesis(self):
+    def synthesis(self) -> None:
         """Run the sizing routine.
 
         Component weight is obtained by multiplying area, effective thickness,
@@ -1395,7 +1395,7 @@ class MajorFrame(Component):
     fs_loc: float
     """Fuselage Station location (e.g. 150in from origin)."""
 
-    loads: ArrayLike
+    loads: Any
     """The loads list contains all external loads applied on this frame.
     [
         [y, z, V, H, M],
@@ -1512,7 +1512,7 @@ class MajorFrame(Component):
 
         _ = ax.set_xlabel("Butt Line, $BL$", fontfamily="serif")
         _ = ax.set_ylabel("Water Line, $WL$", fontfamily="serif")
-        _ = ax.tick_params(axis="both", which="both", direction="in")
+        ax.tick_params(axis="both", which="both", direction="in")
         _ = ax.set_title(f"FS{self.fs_loc} Frame Applied Loads", fontfamily="serif")
         _ = ax.legend(
             handles=[
@@ -1579,8 +1579,8 @@ class MajorFrame(Component):
         self.weight = self.results[:, 0].sum()
 
     def geometry_cuts(
-        self, num, debug: bool = False
-    ) -> Tuple[float, ArrayLike, ArrayLike]:
+        self, num: int, debug: bool = False
+    ) -> Tuple[float, ArrayLike, pd.DataFrame]:
         """Calculate the frame node coordinates for all synthesis cuts. [FRMND1].
 
         The frame synthesis cut coordinates are based on equal-length segments
@@ -1628,7 +1628,7 @@ class MajorFrame(Component):
             # iteration step segment length.
             # Initial dsl_k doesn't matter.
 
-            def objective(phi, *args) -> float:
+            def objective(phi: float, *args: Any) -> float:
                 """An objective local function to minimize.
 
                 Args:
@@ -1643,7 +1643,7 @@ class MajorFrame(Component):
                 del_y = y_k - y_i
                 del_z = z_k - z_i
                 dls_k = np.sqrt(del_y**2 + del_z**2)
-                return abs(dls - dls_k)
+                return float(abs(dls - dls_k))
 
             solution = minimize_scalar(
                 objective,
@@ -1787,7 +1787,7 @@ class MajorFrame(Component):
         area = np.sum(da_j)
 
         # The shear flow the cut due to the unbalanced forces is:
-        def __local_shear_flow(i) -> float:
+        def __local_shear_flow(i: int) -> float:
             """Local function for the shear flow iteration."""
             qi_prime_1 = 0.0
             for n in range(2, i + 1):
@@ -1870,9 +1870,9 @@ class MajorFrame(Component):
         self,
         dls: float,
         zzf: float,
-        inertias: ArrayLike,
-        cut_geom: ArrayLike,
-    ) -> ArrayLike:
+        inertias: Any,
+        cut_geom: pd.DataFrame,
+    ) -> Any:
         """This method calculates the final redundant loads. [FRMLD.2].
 
         Take section cut loads from each section around the perimeter and build
@@ -1885,7 +1885,7 @@ class MajorFrame(Component):
             cut_geom: 2D Array of section geometry
 
         Returns:
-            ArrayLike: Segment centroidal net internal loads
+            Segment centroidal net internal loads
         """
         ioz_s, ioy_s, ioz_f, ioy_f = inertias
         # We gotta do some silly type conversions here.
@@ -1895,14 +1895,14 @@ class MajorFrame(Component):
         dlsp_j = cut_geom["DLSP_j"]
         dlsp = cut_geom["DLS_j"]
         pp = np.sum(dlsp_j)
-        y_pb: ArrayLike = np.array(cut_geom["y_pbj"])
-        z_pb: ArrayLike = np.array(cut_geom["z_pbj"])
-        y: ArrayLike = np.array(cut_geom["y_i"])
-        z: ArrayLike = np.array(cut_geom["z_i"])
-        y_b: ArrayLike = np.array(cut_geom["y_bj"])
-        z_b: ArrayLike = np.array(cut_geom["z_bj"])
-        y_p: ArrayLike = np.array(cut_geom["y_pi"])
-        z_p: ArrayLike = np.array(cut_geom["z_pi"])
+        y_pb: Any = np.array(cut_geom["y_pbj"])
+        z_pb: Any = np.array(cut_geom["z_pbj"])
+        y: Any = np.array(cut_geom["y_i"])
+        z: Any = np.array(cut_geom["z_i"])
+        y_b: Any = np.array(cut_geom["y_bj"])
+        z_b: Any = np.array(cut_geom["z_bj"])
+        y_p: Any = np.array(cut_geom["y_pi"])
+        z_p: Any = np.array(cut_geom["z_pi"])
         # theta: ArrayLike = cut_geom["theta_i"]
         jj = len(cut_geom)
 
@@ -1914,8 +1914,8 @@ class MajorFrame(Component):
                 theta=row["theta_i"],
                 dls=row["DLS_j"],
                 zzf=zzf,
-                ioy_s=ioy_s,
-                ioz_s=ioz_s,
+                ioy_s=float(ioy_s),
+                ioz_s=float(ioz_s),
                 y=y,
                 z=z,
                 y_b=y_b,

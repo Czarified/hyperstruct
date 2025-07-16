@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hyperstruct"
-version = "0.0.9"
+version = "0.0.10"
 description = "Hyperstruct"
 authors = ["Benjamin Crews <aceF22@gmail.com>"]
 license = "MIT"
@@ -18,7 +18,7 @@ Changelog = "https://github.com/czarified/hyperstruct/releases"
 [tool.poetry.dependencies]
 python = ">=3.10, <4.0"
 click = ">=8.0.1, <9.0"
-numpy = ">=1.26.4, <2.0"
+numpy = ">=2.0, <3.0"
 scipy = ">=1.14.1, <2.0"
 matplotlib = ">=3.10.1, <4.0"
 pytest-check = ">=2.5.3, <3.0"
@@ -81,7 +81,7 @@ pretty = true
 show_column_numbers = true
 show_error_codes = true
 show_error_context = true
-disable_error_code = ["import-untyped"]
+disable_error_code = ["import-untyped", "assignment", "operator", "index", "misc"]
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

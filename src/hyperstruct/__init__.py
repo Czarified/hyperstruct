@@ -8,6 +8,8 @@ from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from matplotlib.patches import Circle
 from matplotlib.patches import Ellipse
 from matplotlib.patches import FancyBboxPatch
@@ -249,7 +251,7 @@ class Station:
 
     def show(
         self, coords: Optional[List[Tuple[float, float]]] = None, display: bool = True
-    ) -> Tuple:
+    ) -> Tuple[Figure, Axes]:
         """Plot the station shape for a visual check.
 
         This method just uses matplotlib to draw the shape on a plot.
