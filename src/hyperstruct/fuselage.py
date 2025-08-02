@@ -1424,7 +1424,7 @@ class MajorFrame(Component):
     min_gauge: float = field(default=0.040, metadata={"unit": "inch"})
     """Manufacturing requirement for minimum gauge thickness, default 0.040[in]."""
 
-    def show(self, show_coords: bool = False, save: bool = False) -> Tuple[Any]:
+    def show(self, show_coords: bool = False, save: bool = False) -> Tuple[Any, Any]:
         """Plot the frame and applied loads."""
         if show_coords:
             # coords = [(row[5], row[6]) for row in self.cuts]

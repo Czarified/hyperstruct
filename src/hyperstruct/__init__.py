@@ -18,9 +18,10 @@ from scipy.special import ellipeinc
 
 __version__ = version("hyperstruct")
 
+
 def composite_cg(masses: List[Tuple[float, float]]) -> Tuple[float, float]:
     """Calculate the cg of a combined set of masses, along a single axis.
-    
+
     The composite cg of a collection of objects can be computed if the
     masses and cg locations are known. The composite location along the
     length is determined by summing the moments about a reference point.
@@ -38,13 +39,14 @@ def composite_cg(masses: List[Tuple[float, float]]) -> Tuple[float, float]:
     """
     moments = []
     total_weight = 0
-    for w,x in masses:
-        moments.append(w*x)
+    for w, x in masses:
+        moments.append(w * x)
         total_weight += w
 
     cg = np.sum(moments) / total_weight
 
     return (total_weight, cg)
+
 
 @dataclass
 class Material:

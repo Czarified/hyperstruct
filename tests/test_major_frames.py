@@ -1,15 +1,16 @@
 """Test cases for the MajorFrame and Bulkhead classes."""
 
+from copy import copy
+
+# import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+# import pandas as pd
 import pytest
 import pytest_check as pycheck
 
-from copy import copy
-import matplotlib.pyplot as plt
-
-from hyperstruct import Material, composite_cg
+from hyperstruct import Material
 from hyperstruct import Station
+from hyperstruct import composite_cg
 from hyperstruct.fuselage import Bulkhead
 from hyperstruct.fuselage import MajorFrame
 
@@ -98,57 +99,57 @@ if __name__ == "__main__":  # pragma: no cover
     )
 
     loads_list = [
-        np.array( # FS420
+        np.array(  # FS420
             [
                 # y, z, V, H, M
-                [ 15.5, 26, -2500.0, 0.0, 32441.0],
-                [-15.5, 26, -2500.0, 0.0,-32441.0],
-                [ 5.0, 10,  1750.0, 0.0, 0.0],
-                [-5.0, 10,  1750.0, 0.0, 0.0],
+                [15.5, 26, -2500.0, 0.0, 32441.0],
+                [-15.5, 26, -2500.0, 0.0, -32441.0],
+                [5.0, 10, 1750.0, 0.0, 0.0],
+                [-5.0, 10, 1750.0, 0.0, 0.0],
             ]
         ),
-        np.array( # FS517
+        np.array(  # FS517
             [
                 # y, z, V, H, M
-                [ 15.5, 56.5, 10472.0, 0.0, 0.0],
+                [15.5, 56.5, 10472.0, 0.0, 0.0],
                 [-15.5, 56.5, 10472.0, 0.0, 0.0],
             ]
         ),
-        np.array( # FS720
+        np.array(  # FS720
             [
                 # y, z, V, H, M
-                [ 18.0, 56.5, -20876.0, 0.0, 41.2e4],
+                [18.0, 56.5, -20876.0, 0.0, 41.2e4],
                 [-18.0, 56.5, -20876.0, 0.0, 41.2e4],
             ]
         ),
-        np.array( # FS872
+        np.array(  # FS872
             [
                 # y, z, V, H, M
-                [ 2.0, 47.0, 0.0, 0.0, 1776.9],
-                [ 2.0, 45.5, 0.0, 3421.0, 0.0],
+                [2.0, 47.0, 0.0, 0.0, 1776.9],
+                [2.0, 45.5, 0.0, 3421.0, 0.0],
             ]
         ),
     ]
-    data ={
-        420.00:((30, 32, 10), loads_list[0]),
-        517.50:((60, 50, 20), loads_list[1]),
-        720.00:((60, 50, 24), loads_list[2]),
-        872.00:((30, 30, 14), loads_list[3])
+    data = {
+        420.00: ((30, 32, 10), loads_list[0]),
+        517.50: ((60, 50, 20), loads_list[1]),
+        720.00: ((60, 50, 24), loads_list[2]),
+        872.00: ((30, 30, 14), loads_list[3]),
     }
 
     stations = []
     frames = []
     for fs, (dims, load) in data.items():
-        w,d,r = dims
+        w, d, r = dims
         obj = Station(
-                orientation="FS",
-                name="Rounded Rectangle",
-                number=fs,
-                width=w,
-                depth=d,
-                vertical_centroid=30.0,
-                radius=r,
-            )
+            orientation="FS",
+            name="Rounded Rectangle",
+            number=fs,
+            width=w,
+            depth=d,
+            vertical_centroid=30.0,
+            radius=r,
+        )
         stations.append(copy(obj))
 
         frames.append(
@@ -160,7 +161,6 @@ if __name__ == "__main__":  # pragma: no cover
                 fd=6.0,
             )
         )
-
 
     num = 25
     weights = []
