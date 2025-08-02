@@ -1,12 +1,17 @@
 """Test cases for the MajorFrame and Bulkhead classes."""
 
+from copy import copy
+
+# import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+
+# import pandas as pd
 import pytest
 import pytest_check as pycheck
 
 from hyperstruct import Material
 from hyperstruct import Station
+from hyperstruct import composite_cg
 from hyperstruct.fuselage import Bulkhead
 from hyperstruct.fuselage import MajorFrame
 
@@ -79,7 +84,6 @@ def test_bulkhead(aluminum: Material) -> None:
 
 
 if __name__ == "__main__":  # pragma: no cover
-    # This snippet just verifies the show method and get_coords.
     material = Material(
         rho=0.101,
         E=10.5e6,
@@ -95,64 +99,81 @@ if __name__ == "__main__":  # pragma: no cover
         db_r=116,
     )
 
-    obj = Station(
-        orientation="FS",
-        name="Rounded Rectangle",
-        number=1728.0,
-        width=60.0,
-        depth=50.0,
-        vertical_centroid=30.0,
-        radius=24.61,
-    )
-    cir = Station(
-        orientation="FS",
-        name="Circle",
-        number=1700.0,
-        width=50.0,
-        depth=50.0,
-        vertical_centroid=30.0,
-        radius=25.0,
-    )
-
-    frm = MajorFrame(
-        material=material,
-        fs_loc=cir.number,
-        loads=np.array(
+    loads_list = [
+        np.array(  # FS420
             [
                 # y, z, V, H, M
-                [15.0, 56.5, -20876.0, 0.0, 0.0],
-                [-15.0, 56.5, -20876.0, 0.0, 0.0],
+                [15.5, 26, -2500.0, 0.0, 32441.0],
+                [-15.5, 26, -2500.0, 0.0, -32441.0],
+                [5.0, 10, 1750.0, 0.0, 0.0],
+                [-5.0, 10, 1750.0, 0.0, 0.0],
             ]
         ),
-        geom=cir,
-        fd=6.0,
-    )
-    print(f"Upper Panel = {frm.geom.upper_panel:.3f}")
-    print(f" Side Panel = {frm.geom.side_panel:.3f}")
-    print(f"Lower Panel = {frm.geom.lower_panel:.3f}")
+        np.array(  # FS517
+            [
+                # y, z, V, H, M
+                [15.5, 56.5, 10472.0, 0.0, 0.0],
+                [-15.5, 56.5, 10472.0, 0.0, 0.0],
+            ]
+        ),
+        np.array(  # FS720
+            [
+                # y, z, V, H, M
+                [18.0, 56.5, -20876.0, 0.0, 41.2e4],
+                [-18.0, 56.5, -20876.0, 0.0, 41.2e4],
+            ]
+        ),
+        np.array(  # FS872
+            [
+                # y, z, V, H, M
+                [2.0, 47.0, 0.0, 0.0, 1776.9],
+                [2.0, 45.5, 0.0, 3421.0, 0.0],
+            ]
+        ),
+    ]
+    data = {
+        420.00: ((30, 32, 10), loads_list[0]),
+        517.50: ((60, 50, 20), loads_list[1]),
+        720.00: ((60, 50, 24), loads_list[2]),
+        872.00: ((30, 30, 14), loads_list[3]),
+    }
 
-    # Check coords
-    # y, z = frm.geom.get_coords(np.radians(130), debug=True)
-    # print(f"In quadrant 4: y={y:.1f}, z={z:.1f}\n")
-    # coords = [(y, z)]
+    stations = []
+    frames = []
+    for fs, (dims, load) in data.items():
+        w, d, r = dims
+        obj = Station(
+            orientation="FS",
+            name="Rounded Rectangle",
+            number=fs,
+            width=w,
+            depth=d,
+            vertical_centroid=30.0,
+            radius=r,
+        )
+        stations.append(copy(obj))
 
-    # y, z = frm.geom.get_coords(np.radians(225), debug=True)
-    # print(f"In quadrant 3: y={y:.1f}, z={z:.1f}")
-    # coords = [(y, z)]
+        frames.append(
+            MajorFrame(
+                material=material,
+                fs_loc=obj.number,
+                loads=load,
+                geom=obj,
+                fd=6.0,
+            )
+        )
 
     num = 25
+    weights = []
+    for frm in frames:
+        frm.synthesis(num)
+        print(f"Frame FS{frm.fs_loc:.0f} weight = {frm.weight:.1f}[lbs]")
+        weights.append((frm.weight, frm.fs_loc))
+        _fig, ax = frm.show(show_coords=True, save=False)
 
-    frm.synthesis(num)
-    print("Geometry Table")
-    print(frm.cuts)
-
-    sizing = pd.DataFrame(frm.results, columns=["w_j", "tcap", "t_w_str", "t_w_res"])
-    print("Sizing Results Table")
-    print(sizing)
-    print(f"Frame weight = {frm.weight:.1f} [lbs]")
-
-    frm.show(show_coords=True, save=False)
-
+    total_weight, cg = composite_cg(weights)
+    print(f"Total Frame Weight = {total_weight:.2f}[lbs] 😬")
+    print(f"CG of Frames = {cg:.2f}[in] ⚖")
     # Sweep over number of cuts to observe the prediction sensitivity
     # nums = np.linspace(15, 90, dtype=int, num=25)
     # weights = []
