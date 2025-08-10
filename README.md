@@ -62,6 +62,10 @@ These should probably become their own Issues, but they will at least become the
 - [x] MajorFrames need their own class for analysis methods.
 - [ ] Fuselage class needs a cut method to generate geometry for analysis by averaging the geometry between defined sections.
 - [ ] How does the Fuselage class define where all the different load points (and therefor MajorFrames) are?
+- [ ] Generate Shear-Moment-Torsion (VMT) diagrams for the fuselage.
+- [ ] Lookup loads at a synthesis cut, based on the net shell loads.
+- [ ] Loadcase filtering based on the "Critical Shell Design Loads" criteria?
+- [ ] Where are all the interface loads calculated? They should apply to their MajorFrames, but does Fuselage calculate them?
 
 ## Installation
 
