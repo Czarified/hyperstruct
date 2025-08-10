@@ -1,10 +1,17 @@
 """Test cases for the fuselage module."""
 
+from typing import Tuple
+
+import numpy as np
 import pytest
+from numpy.typing import ArrayLike
 
 from hyperstruct import Material
+from hyperstruct import Station
 from hyperstruct.fuselage import Cover
 from hyperstruct.fuselage import ForcedCrippling
+from hyperstruct.fuselage import Fuselage
+from hyperstruct.fuselage import MajorFrame
 
 
 @pytest.fixture
@@ -53,6 +60,85 @@ def diag_ten(aluminum: Material) -> ForcedCrippling:
     return component
 
 
+@pytest.fixture
+def a_station() -> Tuple[Station]:
+    """Placeholder Station."""
+    return (
+        Station(
+            orientation="FS",
+            name="Placeholder",
+            number=200.0,
+            width=40.0,
+            depth=40.0,
+            vertical_centroid=20.0,
+            radius=15.5,
+        ),
+    )
+
+
+@pytest.fixture
+def b_station() -> Tuple[Station]:
+    """Placeholder Station."""
+    return (
+        Station(
+            orientation="FS",
+            name="Placeholder",
+            number=420.0,
+            width=40.0,
+            depth=40.0,
+            vertical_centroid=20.0,
+            radius=15.5,
+        ),
+    )
+
+
+@pytest.fixture
+def b_frame(aluminum: Material, b_station: Station) -> Tuple[MajorFrame]:
+    """Placeholder MajorFrame."""
+    return (
+        MajorFrame(material=aluminum, fs_loc=420.0, loads=0.0, geom=b_station, fd=4.2),
+    )
+
+
+@pytest.fixture
+def fuselage(a_station: Tuple[Station], b_frame: Tuple[MajorFrame]) -> Fuselage:
+    """Build a Fuselage class."""
+    fuse = Fuselage(stations=a_station, major_frames=b_frame)
+    return fuse
+
+
+@pytest.fixture
+def fuse_loads() -> Tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]:
+    """Some basic beam loads."""
+    w_fus = np.array(
+        [
+            [100.0, -245.0, 0.0],
+            [435.2, -300.0, 0.0],
+            [521.0, -450.0, 0.0],
+        ]
+    )
+    w_fc = np.array(
+        [
+            [110.0, -200.0, 0.0],
+            [400.5, -120.0, 0.0],
+        ]
+    )
+    p_air = np.array(
+        [
+            [110.0, 200.0, 0.0],
+            [400.5, 120.0, 0.0],
+            [435.2, 300.0, 0.0],
+        ]
+    )
+    p_ext = np.array(
+        [
+            [100.0, 245.0, 0.0],
+            [521.0, 450.0, 0.0],
+        ]
+    )
+    return (w_fus, w_fc, p_air, p_ext)
+
+
 def test_unmilled_shear_and_net(unmilled_cover: Cover) -> None:
     """Test an unmilled cover."""
     t_c = unmilled_cover.field_thickness_block_shear()
@@ -89,3 +175,96 @@ def test_diagonal_tension(diag_ten: ForcedCrippling) -> None:
     assert t_r <= 0.032
     assert f_st >= 15000
     assert f_rg >= 6500
+
+
+def test_net_loads(fuselage: Fuselage, fuse_loads: Tuple[ArrayLike]) -> None:
+    """Tests internal loads calculations on a Fuselage class."""
+    w_fus, w_fc, p_air, p_ext = fuse_loads
+    internal_loads = fuselage.net_loads(w_fus, w_fc, p_air, p_ext)
+    assert internal_loads is not None
+
+
+if __name__ == "__main__":  # pragma: no cover
+    # Plot the example fuse loads for visual check
+    # Prototype the VMT diagram code
+    import matplotlib.pyplot as plt
+
+    w_fus = np.array(
+        [
+            [100.0, -245.0, 0.0],
+            [435.2, -300.0, 0.0],
+            [521.0, -450.0, 0.0],
+        ]
+    )
+    w_fc = np.array(
+        [
+            [110.0, -200.0, 0.0],
+            [400.5, -120.0, 0.0],
+        ]
+    )
+    p_air = np.array(
+        [
+            [110.0, 200.0, 0.0],
+            [400.5, 120.0, 0.0],
+            [435.2, 300.0, 0.0],
+        ]
+    )
+    p_ext = np.array(
+        [
+            [100.0, 245.0, 0.0],
+            [521.0, 450.0, 0.0],
+        ]
+    )
+
+    mat = Material(
+        rho=0.1,
+        E=10.5e6,
+        E_c=10.6e6,
+        nu=0.33,
+        F_tu=64e3,
+        F_ty=42.1e3,
+        F_cy=48.3e3,
+        F_su=41.0e3,
+        F_bru=10.04e3,
+        F_bry=89.0e3,
+        F_en=20.0e3,
+        db_r=116,
+    )
+
+    a = Station(
+        orientation="FS",
+        name="Placeholder",
+        number=200.0,
+        width=40.0,
+        depth=40.0,
+        vertical_centroid=20.0,
+        radius=15.5,
+    )
+    b = Station(
+        orientation="FS",
+        name="Placeholder",
+        number=200.0,
+        width=40.0,
+        depth=40.0,
+        vertical_centroid=20.0,
+        radius=15.5,
+    )
+
+    stations = (a,)
+    frames = (MajorFrame(material=mat, fs_loc=420.0, loads=0.0, geom=b, fd=4.2),)
+
+    fuse = Fuselage(stations=stations, major_frames=frames)
+    loads = fuse.net_loads(w_fus, w_fc, p_air, p_ext)
+
+    print(loads)
+
+    fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True, figsize=(11, 5))
+    _ = ax1.plot(loads[:, 0], loads[:, 3])
+    _ = ax2.plot(loads[:, 0], loads[:, 4])
+
+    # _ = ax1.set_xlabel("Fuselage Station, $FS$, [in]")
+    _ = ax1.set_ylabel("Vertical Shear, $V$, [lbs]", fontfamily="serif")
+    _ = ax2.set_ylabel("Vertical Bending, $M$, [in-lbs]", fontfamily="serif")
+    _ = fig.supxlabel("Fuselage Station, $FS$, [in]", fontfamily="serif")
+
+    plt.show()

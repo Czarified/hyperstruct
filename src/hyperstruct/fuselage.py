@@ -2146,3 +2146,78 @@ class Fuselage:
         # This is nonsense stuff to pass pre-commit.
         _ = geom
         #
+
+    def net_loads(
+        self, w_fus: ArrayLike, w_fc: ArrayLike, p_air: ArrayLike, p_ext: ArrayLike
+    ) -> ArrayLike:
+        """Calculates net (ultimate) vertical shear and bending. [FLDNT].
+
+        Calculates net loads at each of the shell synthesis cuts by integrating
+        the distributed force system. Load calculations perform the following
+        systematic procedure:
+            1. Insure that the equations of equilibrium are satisfied.
+            2. Define the fuselage force system.
+            3. Integrate to obtain shear and bending moments.
+
+        Definition of variables are required. For visual reference, refer to
+        [future link will go here]. Aerodynamic forces and the vehicle mass
+        distributions are used to calcluate the net fuselage loads.
+
+        Args:
+            w_fus (ArrayLike): Distributed fuselage structural weights
+            w_fc (ArrayLike): Distributed fuselage content weights (nonstructural)
+            p_air (ArrayLike): Distributed body airloads
+            p_ext (ArrayLike): External forces at the support frames
+
+        Returns:
+            ArrayLike: Loads matrix with cols [FS, Force, Moment, Shear, Bending]
+
+        Raises:
+            ArithmeticError: Violates static equilibrium
+        """
+        # This method is different than what's described in SWEEP. I want to have multiple
+        # defined arrays of applied loads, and get the full fuselage shear/moment values.
+        # SWEEP seems to want to keep the load sources and manually calculate the the
+        # internal loads at each synthesis cut, thus making the math more intense, but
+        # directly getting the values at each cut without interpolation from the overall.
+        # This seems more difficult to me. I'd rather get the full arrays, and have a separate
+        # function that linearly interpolates between the local points when a synthesis cut
+        # falls between defined values.
+
+        # March along the fuselage, and pull together the applied loads into 1 source
+        # For each load station, append the applied forces and moments into a matrix
+        loads = np.vstack((w_fus, w_fc, p_air, p_ext))
+        loads.sort(axis=0)
+
+        # March through the applied loads matrix,
+        # add cumulative shear, and calculate cumulative moment
+        shears = np.cumsum(loads[:, 1])
+        loads = np.column_stack((loads, shears))
+        moments = []
+        x = 0
+        for row in loads:
+            load = row[1]
+            moment = row[2]
+
+            moments.append(moment + load * (row[0] - x))
+            x = row[0]
+
+        moments = np.array(moments)
+
+        # Start it at zero with no loads at origin (free tip)
+        loads = np.column_stack((loads, moments))
+        loads = np.insert(loads, obj=0, values=np.zeros(5, dtype=float), axis=0)
+
+        # Verify static equilibrium
+        if shears[-1] != 0:
+            raise ArithmeticError(
+                f"Static Equilibrium has been violated! {np.sum(shears):.2f} != 0.0"
+            )
+
+        if moments[-1] != 0:
+            raise ArithmeticError(
+                f"Static Equilibrium has been violated! {np.sum(moments):.2f} != 0.0"
+            )
+
+        # Return the final arrays of internal shears and moments
+        return loads
