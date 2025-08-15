@@ -12,13 +12,15 @@ from dataclasses import field
 # from typing import Dict
 from typing import Any
 from typing import Tuple
+from numpy.typing import ArrayLike
 
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
-from numpy.typing import ArrayLike
+import numpy as np
+import pandas as pd
 from scipy.optimize import minimize_scalar
 
 from hyperstruct import Component
@@ -2221,3 +2223,41 @@ class Fuselage:
 
         # Return the final arrays of internal shears and moments
         return loads
+
+    def vmt_diagram(
+        self, w_fus: ArrayLike, w_fc: ArrayLike, p_air: ArrayLike, p_ext: ArrayLike
+    ) -> Tuple[Figure, Tuple[Axes, Axes]]:
+        """Builds the Shear-Bending-Torsion Diagram.
+
+        !!Torsion currently Not Implemented!!
+
+        This method calls the net_loads method to generate a matrix of
+        applied and internal loads. It then puts these into a matplotlib
+        figure for visual verification. This isn't a necessary part
+        of the analysis, but it's good for documentation and visual verification
+        by humans.
+
+        Note, the arguments here are the external loads, not the result of the net_loads
+        method, because this function passes those to the net_loads method directly.
+
+        Args:
+            w_fus (ArrayLike): Distributed fuselage structural weights
+            w_fc (ArrayLike): Distributed fuselage content weights (nonstructural)
+            p_air (ArrayLike): Distributed body airloads
+            p_ext (ArrayLike): External forces at the support frames
+
+        Returns:
+            Tuple: Matplotlib Figure and the Axes it contains
+        """
+        loads = self.net_loads(w_fus, w_fc, p_air, p_ext)
+
+        fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True, figsize=(11, 5))
+        _ = ax1.plot(loads[:, 0], loads[:, 3])
+        _ = ax2.plot(loads[:, 0], loads[:, 4])
+
+        # _ = ax1.set_xlabel("Fuselage Station, $FS$, [in]")
+        _ = ax1.set_ylabel("Vertical Shear, $V$, [lbs]", fontfamily="serif")
+        _ = ax2.set_ylabel("Vertical Bending, $M$, [in-lbs]", fontfamily="serif")
+        _ = fig.supxlabel("Fuselage Station, $FS$, [in]", fontfamily="serif")
+
+        return (fig, (ax1, ax2))
