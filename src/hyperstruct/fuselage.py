@@ -12,15 +12,15 @@ from dataclasses import field
 # from typing import Dict
 from typing import Any
 from typing import Tuple
-from numpy.typing import ArrayLike
 
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
-import numpy as np
-import pandas as pd
+from numpy.typing import ArrayLike
 from scipy.optimize import minimize_scalar
 
 from hyperstruct import Component
@@ -2261,3 +2261,49 @@ class Fuselage:
         _ = fig.supxlabel("Fuselage Station, $FS$, [in]", fontfamily="serif")
 
         return (fig, (ax1, ax2))
+
+    def lookup_loads(self, x: float, loads: ArrayLike) -> Tuple[float, float, float]:
+        """Find the loads at a specific station.
+
+        With the Loads Matrix calculated, it is necessary to find loads
+        at any arbitrary station. Sometimes this station is already defined
+        and evaluated in the matrix (if there are external loads applied
+        there), but most of the time interpolation is needed.
+
+        This method assumes that a linear interpolation between the nearest
+        two points provides acceptable approximation. Given that all loads
+        inputs are limited to sets of point loads, this should be acceptable.
+
+        Args:
+            x (float): Fuselage Station (FS) of interest
+            loads (ArrayLike): Matrix of loads and locations (output of net_loads method)
+
+        Returns:
+            Tuple[float, float, float]: x, shear, and bending
+        """
+        index = np.where(loads[:, 0] == x)[0]
+        if index.size > 0:
+            # This value is evaluated directly
+            # Return the sum of internal shear and moment (last 2 values of the first row)
+            _v = loads[[index]][0]
+            v: float = _v[0, 3]
+            _m = loads[[index]][0]
+            m: float = _m[0, 4]
+            return (x, np.float64(v), np.float64(m))
+        else:
+            # We need to interpolate to find the value
+            # Assume a linear regression between the two nearest values
+            mask = loads[:, 0] > x
+            next_rows = loads[mask]
+            next_row = next_rows[0, :]
+
+            mask = loads[:, 0] < x
+            prev_rows = loads[mask]
+            prev_row = prev_rows[-1, :]
+
+            xp = np.array([prev_row[0], next_row[0]])
+            fp_v = np.array([prev_row[3], next_row[3]])
+            fp_m = np.array([prev_row[4], next_row[4]])
+            v = np.interp(x, xp=xp, fp=fp_v)
+            m = np.interp(x, xp=xp, fp=fp_m)
+            return (x, np.float64(v), np.float64(m))

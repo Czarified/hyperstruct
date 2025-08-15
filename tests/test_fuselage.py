@@ -267,6 +267,16 @@ if __name__ == "__main__":  # pragma: no cover
     loads = fuse.net_loads(w_fus, w_fc, p_air, p_ext)
     fig, (ax1, ax2) = fuse.vmt_diagram(w_fus, w_fc, p_air, p_ext)
 
+    print("   FS     , P     , M_ext   , V     ,  M_int")
     print(loads)
+
+    print("\n\n")
+    x, v, m = fuse.lookup_loads(x=100, loads=loads)
+    print(x)
+    print(v)
+    print(m)
+
+    _ = ax1.plot(x, v, marker="^", color="k")
+    _ = ax2.plot(x, m, marker="^", color="k")
 
     plt.show()
