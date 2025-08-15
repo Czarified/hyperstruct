@@ -4,6 +4,8 @@ from typing import Tuple
 
 import numpy as np
 import pytest
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from numpy.typing import ArrayLike
 
 from hyperstruct import Material
@@ -184,6 +186,14 @@ def test_net_loads(fuselage: Fuselage, fuse_loads: Tuple[ArrayLike]) -> None:
     assert internal_loads is not None
 
 
+def test_vmt_diagram(fuselage: Fuselage, fuse_loads: Tuple[ArrayLike]) -> None:
+    """Tests the diagram method."""
+    w_fus, w_fc, p_air, p_ext = fuse_loads
+    fig, axs = fuselage.vmt_diagram(w_fus, w_fc, p_air, p_ext)
+    assert isinstance(fig, Figure)
+    assert isinstance(axs[0], Axes)
+
+
 if __name__ == "__main__":  # pragma: no cover
     # Plot the example fuse loads for visual check
     # Prototype the VMT diagram code
@@ -255,16 +265,18 @@ if __name__ == "__main__":  # pragma: no cover
 
     fuse = Fuselage(stations=stations, major_frames=frames)
     loads = fuse.net_loads(w_fus, w_fc, p_air, p_ext)
+    fig, (ax1, ax2) = fuse.vmt_diagram(w_fus, w_fc, p_air, p_ext)
 
+    print("   FS     , P     , M_ext   , V     ,  M_int")
     print(loads)
 
-    fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True, figsize=(11, 5))
-    _ = ax1.plot(loads[:, 0], loads[:, 3])
-    _ = ax2.plot(loads[:, 0], loads[:, 4])
+    print("\n\n")
+    x, v, m = fuse.lookup_loads(x=100, loads=loads)
+    print(x)
+    print(v)
+    print(m)
 
-    # _ = ax1.set_xlabel("Fuselage Station, $FS$, [in]")
-    _ = ax1.set_ylabel("Vertical Shear, $V$, [lbs]", fontfamily="serif")
-    _ = ax2.set_ylabel("Vertical Bending, $M$, [in-lbs]", fontfamily="serif")
-    _ = fig.supxlabel("Fuselage Station, $FS$, [in]", fontfamily="serif")
+    _ = ax1.plot(x, v, marker="^", color="k")
+    _ = ax2.plot(x, m, marker="^", color="k")
 
     plt.show()

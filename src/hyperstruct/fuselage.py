@@ -16,6 +16,8 @@ from typing import Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 from numpy.typing import ArrayLike
@@ -2221,3 +2223,87 @@ class Fuselage:
 
         # Return the final arrays of internal shears and moments
         return loads
+
+    def vmt_diagram(
+        self, w_fus: ArrayLike, w_fc: ArrayLike, p_air: ArrayLike, p_ext: ArrayLike
+    ) -> Tuple[Figure, Tuple[Axes, Axes]]:
+        """Builds the Shear-Bending-Torsion Diagram.
+
+        !!Torsion currently Not Implemented!!
+
+        This method calls the net_loads method to generate a matrix of
+        applied and internal loads. It then puts these into a matplotlib
+        figure for visual verification. This isn't a necessary part
+        of the analysis, but it's good for documentation and visual verification
+        by humans.
+
+        Note, the arguments here are the external loads, not the result of the net_loads
+        method, because this function passes those to the net_loads method directly.
+
+        Args:
+            w_fus (ArrayLike): Distributed fuselage structural weights
+            w_fc (ArrayLike): Distributed fuselage content weights (nonstructural)
+            p_air (ArrayLike): Distributed body airloads
+            p_ext (ArrayLike): External forces at the support frames
+
+        Returns:
+            Tuple: Matplotlib Figure and the Axes it contains
+        """
+        loads = self.net_loads(w_fus, w_fc, p_air, p_ext)
+
+        fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True, figsize=(11, 5))
+        _ = ax1.plot(loads[:, 0], loads[:, 3])
+        _ = ax2.plot(loads[:, 0], loads[:, 4])
+
+        # _ = ax1.set_xlabel("Fuselage Station, $FS$, [in]")
+        _ = ax1.set_ylabel("Vertical Shear, $V$, [lbs]", fontfamily="serif")
+        _ = ax2.set_ylabel("Vertical Bending, $M$, [in-lbs]", fontfamily="serif")
+        _ = fig.supxlabel("Fuselage Station, $FS$, [in]", fontfamily="serif")
+
+        return (fig, (ax1, ax2))
+
+    def lookup_loads(self, x: float, loads: ArrayLike) -> Tuple[float, float, float]:
+        """Find the loads at a specific station.
+
+        With the Loads Matrix calculated, it is necessary to find loads
+        at any arbitrary station. Sometimes this station is already defined
+        and evaluated in the matrix (if there are external loads applied
+        there), but most of the time interpolation is needed.
+
+        This method assumes that a linear interpolation between the nearest
+        two points provides acceptable approximation. Given that all loads
+        inputs are limited to sets of point loads, this should be acceptable.
+
+        Args:
+            x (float): Fuselage Station (FS) of interest
+            loads (ArrayLike): Matrix of loads and locations (output of net_loads method)
+
+        Returns:
+            Tuple[float, float, float]: x, shear, and bending
+        """
+        index = np.where(loads[:, 0] == x)[0]
+        if index.size > 0:
+            # This value is evaluated directly
+            # Return the sum of internal shear and moment (last 2 values of the first row)
+            _v = loads[[index]][0]
+            v: float = _v[0, 3]
+            _m = loads[[index]][0]
+            m: float = _m[0, 4]
+            return (x, np.float64(v), np.float64(m))
+        else:
+            # We need to interpolate to find the value
+            # Assume a linear regression between the two nearest values
+            mask = loads[:, 0] > x
+            next_rows = loads[mask]
+            next_row = next_rows[0, :]
+
+            mask = loads[:, 0] < x
+            prev_rows = loads[mask]
+            prev_row = prev_rows[-1, :]
+
+            xp = np.array([prev_row[0], next_row[0]])
+            fp_v = np.array([prev_row[3], next_row[3]])
+            fp_m = np.array([prev_row[4], next_row[4]])
+            v = np.interp(x, xp=xp, fp=fp_v)
+            m = np.interp(x, xp=xp, fp=fp_m)
+            return (x, np.float64(v), np.float64(m))
