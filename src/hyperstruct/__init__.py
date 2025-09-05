@@ -279,21 +279,32 @@ class Station:
             raise NotImplementedError
 
     def show(
-        self, coords: Optional[List[Tuple[float, float]]] = None, display: bool = True
-    ) -> Tuple[Figure, Axes]:
+        self,
+        coords: Optional[List[Tuple[float, float]]] = None,
+        display: bool = True,
+        ax: Axes = None,
+        xlim: None | Tuple[float, float] = None,
+        ylim: None | Tuple[float, float] = None,
+    ) -> None | Tuple[Figure, Axes]:
         """Plot the station shape for a visual check.
 
         This method just uses matplotlib to draw the shape on a plot.
         It will select the appropriate shape (Artist) object, based on
         the Station properties, and put in a figure on it's own.
         """
-        fig, ax = plt.subplots()
-        lower_y = 0.0 if self.vertical_centroid >= 0 else self.vertical_centroid
-        ax.set(
-            xlim=(-1.1 * self.width, 1.1 * self.width),
-            ylim=(lower_y, 1.1 * self.depth + self.vertical_centroid),
-            aspect="equal",
-        )
+        if not ax:
+            # If a specific axes object is passed, use that axes,
+            # otherwise, we need to instantiate the axes
+            fig, ax = plt.subplots()
+
+        if not xlim:
+            xlim = (-1.1 * self.width, 1.1 * self.width)
+
+        if not ylim:
+            lower_y = 0.0 if self.vertical_centroid >= 0 else self.vertical_centroid
+            ylim = (lower_y, 1.1 * self.depth + self.vertical_centroid)
+
+        ax.set(xlim=xlim, ylim=ylim)
 
         if self.is_ellipse:
             obj = Ellipse(
@@ -370,10 +381,16 @@ class Station:
                     markersize=4,
                 )
 
+        _ = ax.set_title(
+            label=f"FS {self.number}, {self.name}", fontfamily="serif", fontsize="small"
+        )
         if display:
             plt.show()
 
-        return (fig, ax)
+        if ax:
+            return None
+        else:
+            return (fig, ax)
 
     def _quadratic_sol(
         self, m: float, q: float, p: float
