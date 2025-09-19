@@ -282,7 +282,7 @@ class Station:
         self,
         coords: Optional[List[Tuple[float, float]]] = None,
         display: bool = True,
-        ax: Axes = None,
+        axes: Axes = None,
         xlim: None | Tuple[float, float] = None,
         ylim: None | Tuple[float, float] = None,
     ) -> None | Tuple[Figure, Axes]:
@@ -292,10 +292,12 @@ class Station:
         It will select the appropriate shape (Artist) object, based on
         the Station properties, and put in a figure on it's own.
         """
-        if not ax:
+        if not axes:
             # If a specific axes object is passed, use that axes,
             # otherwise, we need to instantiate the axes
             fig, ax = plt.subplots()
+        else:
+            ax = axes
 
         if not xlim:
             xlim = (-1.1 * self.width, 1.1 * self.width)
@@ -387,7 +389,7 @@ class Station:
         if display:
             plt.show()
 
-        if ax:
+        if axes:
             return None
         else:
             return (fig, ax)

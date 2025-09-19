@@ -1426,7 +1426,7 @@ class MajorFrame(Component):
     min_gauge: float = field(default=0.040, metadata={"unit": "inch"})
     """Manufacturing requirement for minimum gauge thickness, default 0.040[in]."""
 
-    def show(self, show_coords: bool = False, save: bool = False) -> Tuple[Any, Any]:
+    def show(self, show_coords: bool = False, save: bool = False, display: bool=False) -> Tuple[Any, Any]:
         """Plot the frame and applied loads."""
         if show_coords:
             # coords = [(row[5], row[6]) for row in self.cuts]
@@ -1468,7 +1468,7 @@ class MajorFrame(Component):
                         "color": "red",
                     },
                 )
-                _ = ax.annotate(abs(vertical), xy=v_tip)
+                _ = ax.annotate(f"{abs(vertical):.2f}", xy=v_tip)
             if horizontal != 0.0:
                 _ = ax.annotate(
                     "",
@@ -1481,7 +1481,7 @@ class MajorFrame(Component):
                     },
                 )
                 anchor = "left" if horizontal > 0 else "right"
-                _ = ax.annotate(abs(horizontal), xy=h_tip, ha=anchor)
+                _ = ax.annotate(f"{abs(horizontal):.2f}", xy=h_tip, ha=anchor)
             if moment != 0.0:
                 z_a = z - self.geom.depth / 10
                 z_b = z + self.geom.depth / 10
@@ -1510,7 +1510,7 @@ class MajorFrame(Component):
                 )
                 moment_text = (y_moment, z)
                 anchor = "left" if moment > 0 else "right"
-                _ = ax.annotate(abs(moment), xy=moment_text, ha=anchor)
+                _ = ax.annotate(f"{abs(moment):.2f}", xy=moment_text, ha=anchor)
 
         _ = ax.set_xlabel("Butt Line, $BL$", fontfamily="serif")
         _ = ax.set_ylabel("Water Line, $WL$", fontfamily="serif")
@@ -1537,7 +1537,8 @@ class MajorFrame(Component):
         if save:
             fig.savefig(f"FS{self.fs_loc}_geom_loads.png")
 
-        plt.show()
+        if display:
+            plt.show()
 
         return fig, ax
 
