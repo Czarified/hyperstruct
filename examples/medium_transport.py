@@ -118,15 +118,15 @@ target_weight = 73000
 point_weights = np.array(
     [
         # Weight , FS
-        [1200, 93],
-        [6500, 165],
-        [9000, 245],
-        [15000, 497],
-        [16000, 620],
-        [11000, 737],
-        [7600, 941],
-        [4200, 1071],
-        [2500, 1200],
+        [-1200, 93],
+        [-6500, 165],
+        [-9000, 245],
+        [-15000, 497],
+        [-16000, 620],
+        [-11000, 737],
+        [-7600, 941],
+        [-4200, 1071],
+        [-2500, 1200],
     ]
 )
 _w, _cg = composite_cg(point_weights)
@@ -168,12 +168,13 @@ TIYY = np.sum(point_weights[:, 0] * (XCG - point_weights[:, 1]) ** 2)
 print(f"Vehicle pitch inertia = {TIYY:.3e}")
 
 print(f"\nLoads for {FNZ0}g Taxi:")
+print(25 * "-")
 print(f" Rmg = {Rmg:.3e} [lbs]")
 print(f" Rng = {Rng:.3e} [lbs]")
 print(f"FNZO = {FNZ0:.2f} [g]")
 diff = FNZ0 * DGW - Rmg - Rng
 print(
-    f"Balance of Vertical Forces: {FNZ0:.1f}*{DGW:.2e} - {Rmg:.2e} - {Rng:.2e} = {diff:.1f}"
+    f"Balance of Vertical Forces: {FNZ0:.1f}*{DGW:.2e} - {Rmg:.2e} - {Rng:.2e} = {diff:.1f}\n"
 )
 
 
@@ -250,26 +251,30 @@ w_fus = np.column_stack(
 )
 w_fc = np.zeros(3)
 p_air = np.zeros(3)
-ext_loads = [row[:, 2].sum() for row in gear_loads]
+ext_loads = [arr[:, 2].sum() for arr in gear_loads]
 p_ext = np.column_stack(
     (np.array([[165], [620]]), np.transpose(ext_loads), np.zeros((2,)))
 )
+print("Fuselage Frame Weights:")
+print(25 * "-")
 print(w_fus)
-print("")
+print(11 * " " + f"{np.sum(w_fus[:, 1]):.2f}")
+print("\nFuselage Frame Loads:")
+print(25 * "-")
 print(p_ext)
+print(17 * " " + f"{np.sum(p_ext[:, 1]):.2f}")
 
 fuse = Fuselage(stations=stations, major_frames=frames)
 loads = fuse.net_loads(w_fus, w_fc, p_air, p_ext)
 fig, (ax1, ax2) = fuse.vmt_diagram(w_fus, w_fc, p_air, p_ext)
 
-print("   FS     , P     , M_ext   , V     ,  M_int")
-print(loads)
+with np.printoptions(precision=3):
+    print("   FS     , P     , M_ext   , V     ,  M_int")
+    print(loads)
+    print("\n\n")
 
-print("\n\n")
-x, v, m = fuse.lookup_loads(x=500, loads=loads)
-print(x)
-print(v)
-print(m)
+x, v, m = fuse.lookup_loads(x=400, loads=loads)
+print(f"FS{x}: V={v / 1000:.1f}[kip], M={m:.2e}[in-lbs]")
 
 _ = ax1.plot(x, v, marker="^", color="k")
 _ = ax2.plot(x, m, marker="^", color="k")

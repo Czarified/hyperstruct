@@ -1426,7 +1426,9 @@ class MajorFrame(Component):
     min_gauge: float = field(default=0.040, metadata={"unit": "inch"})
     """Manufacturing requirement for minimum gauge thickness, default 0.040[in]."""
 
-    def show(self, show_coords: bool = False, save: bool = False, display: bool=False) -> Tuple[Any, Any]:
+    def show(
+        self, show_coords: bool = False, save: bool = False, display: bool = False
+    ) -> Tuple[Any, Any]:
         """Plot the frame and applied loads."""
         if show_coords:
             # coords = [(row[5], row[6]) for row in self.cuts]
@@ -2190,18 +2192,27 @@ class Fuselage:
         # March along the fuselage, and pull together the applied loads into 1 source
         # For each load station, append the applied forces and moments into a matrix
         loads = np.vstack((w_fus, w_fc, p_air, p_ext))
-        loads.sort(axis=0)
+        # Sorting the array by the FS (the 0th column)
+        row_idx = np.argsort(loads[:, 0])
+        loads = loads[row_idx]
+        # print("\nNET LOADS FUNCTION DEBUG")
+        # print("Loads Array:")
+        # print(" [        FS,         Load,         Moment  ]")
+        # print(loads)
 
         # March through the applied loads matrix,
         # add cumulative shear, and calculate cumulative moment
         shears = np.cumsum(loads[:, 1])
         loads = np.column_stack((loads, shears))
+        # print(f"Stacked Loads Array:")
         moments = []
         x = 0
         for row in loads:
-            load = row[1]
+            load = row[3]
             moment = row[2]
-
+            # Cumulative internal moment is equal to the previous moment,
+            # plus any point moment, plus the internal shear
+            # multiplied by the incremental distance.
             moments.append(moment + load * (row[0] - x))
             x = row[0]
 
@@ -2209,17 +2220,18 @@ class Fuselage:
 
         # Start it at zero with no loads at origin (free tip)
         loads = np.column_stack((loads, moments))
-        loads = np.insert(loads, obj=0, values=np.zeros(5, dtype=float), axis=0)
+        # with np.printoptions(precision=3):
+        #     print(loads)
 
         # Verify static equilibrium
         if shears[-1] != 0:
             raise ArithmeticError(
-                f"Static Equilibrium has been violated! {np.sum(shears):.2f} != 0.0"
+                f"Shear Static Equilibrium has been violated! {np.sum(shears):.2f} != 0.0"
             )
 
         if moments[-1] != 0:
             raise ArithmeticError(
-                f"Static Equilibrium has been violated! {np.sum(moments):.2f} != 0.0"
+                f"Moment Static Equilibrium has been violated! {np.sum(moments):.2f} != 0.0"
             )
 
         # Return the final arrays of internal shears and moments
