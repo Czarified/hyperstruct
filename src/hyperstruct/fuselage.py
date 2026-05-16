@@ -886,8 +886,6 @@ class MinorFrame(Component):
         self,
         d: float,
         h: float,
-        frame_material: Material,
-        long_material: Material,
         D: float,
         M: float,
         Z: float,
@@ -896,6 +894,7 @@ class MinorFrame(Component):
         RC: float,
         f_s: float,
         f_scr: float,
+        long_material: Material | None = None,
     ) -> float:
         """Thickness required for post-buckled strength."""
         # Pass everything directly through to the ForcedCrippling class.
@@ -910,7 +909,7 @@ class MinorFrame(Component):
             c=c,
             b=b,
             construction=construction,
-            frame_material=frame_material,
+            frame_material=self.material,
             cover_material=cover_material,
             long_material=long_material,
             t_r=t_r,
@@ -2106,7 +2105,16 @@ class Fuselage:
             None
         """
         _ = end
-        return start
+        interpolated = Station(
+            orientation=start.orientation,
+            name=start.name,
+            number=np.mean([start.number, end.number]),
+            width=np.mean([start.width, end.width]),
+            depth=np.mean([start.depth, end.depth]),
+            vertical_centroid=np.mean([start.vertical_centroid, end.vertical_centroid]),
+            radius=np.mean([start.radius, end.radius]),
+        )
+        return interpolated
 
     def synthesis(self) -> None:
         """The full multistations synthesis loop.
@@ -2129,7 +2137,7 @@ class Fuselage:
         Pressure bulkhead design criteria and sizing are also evaluated
         independently for local considerations.
 
-        Several assumptions have bene made to minimize the multiplicity of
+        Several assumptions have been made to minimize the multiplicity of
         variables and thus simplify the synthesis process.
             1. The shell is assumed to be composed of only four (4) sectors:
             upper, lower, and two symmetric sides.
