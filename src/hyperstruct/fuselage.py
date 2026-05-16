@@ -2118,7 +2118,7 @@ class Fuselage:
         Frames, and Longitudinal Members (Stringers/Longerons) form the basic
         structural grid work that resists vehicle shear and bending loads. Covers
         are thin sheets which are efficient in resisting shear and tension loads,
-        but inefficient in resitting compresison loads. Stiffening members, Minor
+        but inefficient in resisting compresison loads. Stiffening members, Minor
         Frames, and Stringers/Longerons are used to provide the cpability for
         resisting compression loads.
 
@@ -2153,7 +2153,12 @@ class Fuselage:
         #
 
     def net_loads(
-        self, w_fus: ArrayLike, w_fc: ArrayLike, p_air: ArrayLike, p_ext: ArrayLike
+        self,
+        w_fus: ArrayLike,
+        w_fc: ArrayLike,
+        p_air: ArrayLike,
+        p_ext: ArrayLike,
+        debug: bool = False,
     ) -> ArrayLike:
         """Calculates net (ultimate) vertical shear and bending. [FLDNT].
 
@@ -2173,6 +2178,7 @@ class Fuselage:
             w_fc (ArrayLike): Distributed fuselage content weights (nonstructural)
             p_air (ArrayLike): Distributed body airloads
             p_ext (ArrayLike): External forces at the support frames
+            debug (bool): Print debugging information
 
         Returns:
             ArrayLike: Loads matrix with cols [FS, Force, Moment, Shear, Bending]
@@ -2195,43 +2201,55 @@ class Fuselage:
         # Sorting the array by the FS (the 0th column)
         row_idx = np.argsort(loads[:, 0])
         loads = loads[row_idx]
-        # print("\nNET LOADS FUNCTION DEBUG")
-        # print("Loads Array:")
-        # print(" [        FS,         Load,         Moment  ]")
-        # print(loads)
+        # Generating an array with unique FS values
+        unique_x, inverse_indices = np.unique(loads[:, 0], return_inverse=True)
+        sum_p = np.bincount(inverse_indices, weights=loads[:, 1])
+        sum_m = np.bincount(inverse_indices, weights=loads[:, 2])
+        loads = np.column_stack((unique_x, sum_p, sum_m))
+        # We've combined all the external loads now.
+        # Time to remove the zero row for net loads computation.
+        loads = loads[1:]
+
+        if debug:
+            print("\nNET LOADS FUNCTION DEBUG")
+            print("Loads Array:")
+            print(" [        FS,         Load,         Moment  ]")
+            print(loads)
 
         # March through the applied loads matrix,
         # add cumulative shear, and calculate cumulative moment
         shears = np.cumsum(loads[:, 1])
         loads = np.column_stack((loads, shears))
-        # print(f"Stacked Loads Array:")
         moments = []
         x = 0
-        for row in loads:
-            load = row[3]
-            moment = row[2]
-            # Cumulative internal moment is equal to the previous moment,
-            # plus any point moment, plus the internal shear
-            # multiplied by the incremental distance.
-            moments.append(moment + load * (row[0] - x))
+        for i, row in enumerate(loads):
+            if i == 0:
+                # First entry won't have previous moment, so it's zero
+                moments.append(0)
+            else:
+                # Cumulative internal moment is equal to the previous moment,
+                # plus any point moment, plus the internal cumulative shear
+                # multiplied by the incremental distance.
+                prev_m = moments[i - 1]
+                point_moment = row[2]
+                load = loads[i - 1][3]
+                moments.append(prev_m + point_moment + load * (row[0] - x))
+
             x = row[0]
 
         moments = np.array(moments)
 
         # Start it at zero with no loads at origin (free tip)
         loads = np.column_stack((loads, moments))
-        # with np.printoptions(precision=3):
-        #     print(loads)
-
         # Verify static equilibrium
         if shears[-1] != 0:
             raise ArithmeticError(
-                f"Shear Static Equilibrium has been violated! {np.sum(shears):.2f} != 0.0"
+                f"Shear Static Equilibrium has been violated! {shears[-1]:.2f} != 0.0"
             )
 
-        if moments[-1] != 0:
+        if not np.isclose(moments[-1], 0.0):
             raise ArithmeticError(
-                f"Moment Static Equilibrium has been violated! {np.sum(moments):.2f} != 0.0"
+                f"Moment Static Equilibrium has been violated! {moments[-1]:.2f} != 0.0"
             )
 
         # Return the final arrays of internal shears and moments
@@ -2266,7 +2284,7 @@ class Fuselage:
 
         fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True, figsize=(11, 5))
         _ = ax1.plot(loads[:, 0], loads[:, 3])
-        _ = ax2.plot(loads[:, 0], loads[:, 4])
+        _ = ax2.plot(loads[:, 0], loads[:, 4], color="darkorange")
 
         # _ = ax1.set_xlabel("Fuselage Station, $FS$, [in]")
         _ = ax1.set_ylabel("Vertical Shear, $V$, [lbs]", fontfamily="serif")

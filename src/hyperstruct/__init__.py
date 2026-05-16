@@ -19,6 +19,7 @@ from scipy.special import ellipeinc
 __version__ = version("hyperstruct")
 
 
+# TODO: We should have an inverse version of this for smearing weights
 def composite_cg(masses: List[Tuple[float, float]]) -> Tuple[float, float]:
     """Calculate the cg of a combined set of masses, along a single axis.
 

@@ -28,6 +28,9 @@ from hyperstruct.fuselage import Fuselage
 from hyperstruct.fuselage import MajorFrame
 
 
+# from hyperstruct.fuselage import MinorFrame
+
+
 # Some global variables for reference
 FUSELAGE_LENGTH = 12 * (97 + 15) + 9
 # Ignore the floor break transitions, since we're not matching the exact shape
@@ -137,12 +140,12 @@ print(f"           CG = {_cg:.2f} [in]")
 
 #
 # Landing Gear Loads Calculation
-#       Taxi, WC=73k, 1.5g
+#       Taxi, WC=73k, 2.0g
 #
-FNZ0 = 1.5
-XNGG = 240
-XMGG = 600
-XCG = 596
+FNZ0 = 2.0
+XNGG = 165
+XMGG = 620
+XCG = _cg
 DGW = target_weight
 Rmg = FNZ0 * DGW * (XCG - XNGG) / (XMGG - XNGG)
 Rng = FNZ0 * DGW - Rmg
@@ -225,7 +228,7 @@ for station in stations:
     elif station.number == 620:
         load = gear_loads[1]
     else:
-        load = None
+        load = np.zeros((2, 5))
 
     frames[station.number] = MajorFrame(
         material=al2024,
@@ -267,9 +270,10 @@ print(17 * " " + f"{np.sum(p_ext[:, 1]):.2f}")
 fuse = Fuselage(stations=stations, major_frames=frames)
 loads = fuse.net_loads(w_fus, w_fc, p_air, p_ext)
 fig, (ax1, ax2) = fuse.vmt_diagram(w_fus, w_fc, p_air, p_ext)
+_ = fig.suptitle(f"{FNZ0:.1f}g Taxi, WC=73kip, xCG={XCG:.0f}[in]")
 
 with np.printoptions(precision=3):
-    print("   FS     , P     , M_ext   , V     ,  M_int")
+    print("     FS     , P     ,   M_ext   ,   V     ,    M_int")
     print(loads)
     print("\n\n")
 
@@ -277,6 +281,20 @@ x, v, m = fuse.lookup_loads(x=400, loads=loads)
 print(f"FS{x}: V={v / 1000:.1f}[kip], M={m:.2e}[in-lbs]")
 
 _ = ax1.plot(x, v, marker="^", color="k")
-_ = ax2.plot(x, m, marker="^", color="k")
+_ = ax2.plot(x, m, marker="^", color="k", label="Analysis Point")
+_ = ax2.legend()
 
 plt.show()
+
+
+#
+#   S I Z I N G
+#
+# The synthesis method currently doesn't do anything...
+# fuse.synthesis()
+
+# Major Frames
+print("Major Frame Sizing:")
+for frame in frames:
+    frame.synthesis()
+    print(f"   FS {frame.fs_loc}: {frame.weight:.1f}[lbf]")
