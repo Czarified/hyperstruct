@@ -11,6 +11,7 @@ from dataclasses import field
 
 # from typing import Dict
 from typing import Any
+from typing import NamedTuple
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -24,6 +25,7 @@ from numpy.typing import ArrayLike
 from scipy.optimize import minimize_scalar
 
 from hyperstruct import Component
+from hyperstruct import LoadCase
 from hyperstruct import Material
 from hyperstruct import Station
 
@@ -755,6 +757,45 @@ class Cover(Component):
 
         return (float(f_l * t_l), float(f_c * t_c))
 
+    def sizing(self) -> dict:
+        """Calculates Cover thicknesses required. [FCOVER].
+
+        Sizing calculates the thickness required for the current "snapshot"
+        condition. This assumes you've provided all the required instance
+        variables for sizing, including load (V), area moment (Q), and area
+        moment of inertia (I).
+
+        The Upper and Lower portions are calculated separately,
+        but will always be the same. Upper and lower criteria include
+        pressure design, local panel flutter, and acoustic fatigue. The side
+        panels include checks against shear strength.
+
+        Returns:
+            dict: results dictionary for upper, lower, and side covers
+        """
+        # Upper
+        upper_t = {}
+        upper_t["pressure"] = self.thickness_pressure()
+        upper_t["panel_flutter"] = self.panel_flutter(mach=None, altitude=None)
+        upper_t["acoustic"] = self.acoustic_fatigue()
+        # Lower
+        lower_t = {}
+        lower_t["pressure"] = self.thickness_pressure()
+        lower_t["panel_flutter"] = self.panel_flutter(mach=None, altitude=None)
+        lower_t["acoustic"] = self.acoustic_fatigue()
+        # Side
+        side_t = {}
+        side_t["pressure"] = self.thickness_pressure()
+        side_t["shear"] = self.field_thickness_block_shear()
+        side_t["net_section"] = self.land_thickness_net_section()
+        side_t["post_buckled"] = self.field_thickness_postbuckled()
+        side_t["panel_flutter"] = self.panel_flutter(mach=None, altitude=None)
+        side_t["acoustic"] = self.acoustic_fatigue()
+
+        results = {"upper": upper_t, "lower": lower_t, "side": side_t}
+
+        return results
+
 
 @dataclass
 class MinorFrame(Component):
@@ -785,6 +826,15 @@ class MinorFrame(Component):
 
     t_r: float = 0.0
     """cap flange thickness."""
+
+    M: float | None = None
+    """Bending moment of the section."""
+
+    frame_spacing: float | None = None
+    """Frame spacing, if known."""
+
+    diameter: float | None = None
+    """The fuselage diameter at the cut."""
 
     @property
     def t_w(self) -> float:
@@ -822,31 +872,26 @@ class MinorFrame(Component):
             ** 0.5
         )
 
-    def general_stability(self, L: float, D: float, M: float) -> float:
+    def general_stability(self) -> float:
         """Thickness to avoid general instability.
 
         The thickness that provides frame stiffness sufficient to prevent
         general instability failure is solved via the Shanley equation.
 
-        Args:
-            L: Frame Spacing
-            D: Fuselage Diameter
-            M: Bending moment at the cut
-
         Returns:
             A float of Flange thickness.
         """
         c_f = 1 / 16000
-        numerator = c_f * M * D**2
+        numerator = c_f * self.M * self.diameter**2
         denominator = (
             self.material.E_c
-            * L
+            * self.frame_spacing
             * (self.b * self.c**2 + 2 * self.b**3 * self.c / 3 + self.c**3 / 24)
         )
 
         return float(numerator / denominator)
 
-    def acoustic_fatigue(self, d: float) -> float:
+    def acoustic_fatigue(self) -> float:
         """Thickness requirements based on acoustic fatigue.
 
         Assumptions are:
@@ -866,9 +911,6 @@ class MinorFrame(Component):
         decibel level is then increased by 30, which represents jet noise instead
         of a purely random spectrum.
 
-        Args:
-            d: Support spacing (frame spacing)
-
         Returns:
             A float of Flange thickness.
         """
@@ -878,7 +920,7 @@ class MinorFrame(Component):
         db_oa = db_r + 30
         P = 2.9e-9 * 10 ** (db_oa / 20)
         # Note: K_c is directly hardcoded to 7.025, per Fig. 20 of ADA002867
-        t_r = 7.025 * d**0.5 * P**2 / self.material.F_en
+        t_r = 7.025 * self.frame_spacing**0.5 * P**2 / self.material.F_en
 
         return float(t_r)
 
@@ -887,7 +929,6 @@ class MinorFrame(Component):
         d: float,
         h: float,
         D: float,
-        M: float,
         Z: float,
         sum_z_sq: float,
         t_c: float,
@@ -918,10 +959,38 @@ class MinorFrame(Component):
         # directly, we only need the first value in the returned tuple.
         # No further analysis is necessary.
         t, _, _ = check.forced_crippling(
-            D=D, M=M, Z=Z, sum_z_sq=sum_z_sq, t_c=t_c, RC=RC, f_s=f_s, f_scr=f_scr
+            D=self.diameter,
+            M=self.M,
+            Z=Z,
+            sum_z_sq=sum_z_sq,
+            t_c=t_c,
+            RC=RC,
+            f_s=f_s,
+            f_scr=f_scr,
         )
 
         return float(t)
+
+    def sizing(self) -> dict:
+        """Calculates the MinorFrame sizing. [MINFR]."""
+        upper = {
+            "general_stability": self.general_stability(),
+            "acoustic_fatigue": self.acoustic_fatigue(),
+        }
+        lower = {
+            "general_stability": self.general_stability(),
+            "acoustic_fatigue": self.acoustic_fatigue(),
+        }
+        side = {
+            "general_stability": self.general_stability(),
+            "acoustic_fatigue": self.acoustic_fatigue(),
+            # TODO: How do we simplify the post_buckled method...Fucking diagonal tension... FML
+            "forced_crippling": self.post_buckled(stufffffffff),
+        }
+
+        results = {"upper": upper, "lower": lower, "side": side}
+
+        return results
 
 
 @dataclass
@@ -946,6 +1015,9 @@ class Longeron(Component):
 
     k: float
     """Inner flange proportion of web height."""
+
+    M: float | None = None
+    """Bending moment at the cut."""
 
     @property
     def area(self) -> float:
@@ -983,7 +1055,6 @@ class Longeron(Component):
 
     def bending_strength(
         self,
-        M_ext: float,
         t: float,
         d: float,
         I_t: float,
@@ -1048,11 +1119,12 @@ class Longeron(Component):
         M_sl = 0.0
 
         # Moment reacted by longerons
-        M_l = 0.5 * M_ext - M_c - M_s - M_sl
+        M_l = 0.5 * self.M - M_c - M_s - M_sl
 
         # Longeron area to resist this moment
         A_l = M_l * 0.5 * d / (f_max_l * self.i_xx / self.area)
 
+        # TODO:
         # Now the compression sector is evaluated
         # Effectiveness of cover in compression is based on Peery curved panel buckling
         # F_CCR = ( 9*(t_c/R)**(5/3) + 0.16*(t_c/L)**(1.3) + K_c*np.pi**2/(12*(1-nu_c**2)) ) * cover_e
@@ -2091,6 +2163,19 @@ class Fuselage:
     major_frames: Tuple[MajorFrame]
     """A set of MajorFrames with load introduction points."""
 
+    loadcase: LoadCase
+    """A single loadcase to evaluate."""
+
+    # TODO: Do we want these as instance variables?
+    cover_model: Cover
+    """The Cover model to use."""
+
+    long_model: Longeron
+    """The Longeron/Stinger model to use."""
+
+    frame_model: MinorFrame
+    """The MinorFrame model to use."""
+
     def cut_geometry(self, start: Station, end: Station) -> Station:
         """Interpolate the geometry between the described stations.
 
@@ -2116,10 +2201,8 @@ class Fuselage:
         )
         return interpolated
 
-    def synthesis(self) -> None:
-        """The full multistations synthesis loop.
-
-        Mocking this up for now, to outline the roadmap for all methods.
+    def synthesis(self, frame_spacing: float | None = None) -> None:
+        """The full multistation synthesis loop. [FUSSHL].
 
         Geometry definitions and constraints, loads, and design criteria are all
         parameters evaluated in the synthesis of shell members. Covers, Minor
@@ -2146,19 +2229,35 @@ class Fuselage:
             3. The side sector is designed to resist only vertical shear load,
             and stringers in this sector are sized to satisfy minimum area and
             cover support requirements.
+
+        Args:
+            frame_spacing (Float|None) : Provide frame spacing or search for min frame spacing by leaving blank. Default None.
         """
-        for k, v in enumerate(self.stations):
+        # Doing the MajorFrame weight first.
+        for frame in self.major_frames:
+            frame.synthesis()
+
+        for k, station in enumerate(self.stations):
             if k == len(self.stations):
                 # the last station in the tuple is the tail geometry,
                 # so no synthesis cut aft of the tail section.
                 continue
             else:
                 # interpolate the geometry between the current station and the next
-                geom = self.cut_geometry(v, self.stations[k + 1])
+                geom = self.cut_geometry(station, self.stations[k + 1])
 
-        # This is nonsense stuff to pass pre-commit.
-        _ = geom
-        #
+            _, cut_shear, cut_bending = self.lookup_loads(geom.number, self.loads)
+
+            # Should we use a provided spacing or conduct a frame spacing search?
+            if not frame_spacing:
+                cut_results = self.frame_search(V=cut_shear, M=cut_bending, geom=geom)
+            else:
+                cut_results = self.size_shell(
+                    V=cut_shear, M=cut_bending, geom=geom, frame_spacing=frame_spacing
+                )
+
+            # TODO: Not implemented
+            _ = self.size_station()
 
     def net_loads(
         self,
@@ -2346,3 +2445,70 @@ class Fuselage:
             v = np.interp(x, xp=xp, fp=fp_v)
             m = np.interp(x, xp=xp, fp=fp_m)
             return (x, np.float64(v), np.float64(m))
+
+    def stringer_search(self):
+        """Search for weight-optimum stringer/longeron spacing. [LONGS]."""
+        # TODO: We need to calculate these at each longeron search step
+        self.cover_model.Q = self.get_Q()
+        self.cover_modelcover.I = self.get_I()
+
+        pass
+
+    def frame_search(
+        self,
+        min_spacing: float,
+        V: float,
+        M: float,
+        geom: Station,
+    ) -> NamedTuple:
+        """Search for weight-optimum frame spacing. [FPANEL].
+
+        Frame spacing starts with a pre-determined maximum, based on the
+        shell dimensions, and an initial minimum. Spacing is increased until
+        the lumped weight of covers, minor frames, and longitudinal members
+        indicates an upward trend. This increase of weight, or an optimum less
+        than the initial spacing abbreviates the search.
+        """
+        max_spacing = max(geom.depth, geom.width) / 2
+
+        for spacing in np.linspace(min_spacing, max_spacing, num=10):
+            results_obj = self.size_shell(V=V, M=M, frame_spacing=spacing, geom=geom)
+            if spacing > min_spacing:
+                # The first iteration won't have previous results
+                if results_obj.weight > previous_results.weight:
+                    break
+
+            previous_results = results_obj
+
+        return previous_results
+
+    def size_shell(
+        self,
+        V: float,
+        M: float,
+        frame_spacing: float,
+        geom: Station,
+    ) -> NamedTuple:
+        """Conducts analysis point sizing of Fuselage shell structure.
+
+        This method sizes shell structure at a single point.
+        """
+        # Set the instance variables for our cut loads
+        self.cover_model.V = V
+        self.cover_model.L = frame_spacing
+        self.cover_model.D = long_spacing
+
+        self.frame_model.M = M
+        self.frame_model.frame_spacing = frame_spacing
+        self.frame_model.diameter = np.mean([geom.depth, geom.width])
+
+        self.long_model.M = M
+        # TODO: What else does the longeorn model need?
+
+        # Run the class sizing routines
+        self.cover_model.sizing()
+        self.frame_model.sizing()
+        self.long_model.sizing()
+
+        # Caculate the weight and build the results object
+        pass
