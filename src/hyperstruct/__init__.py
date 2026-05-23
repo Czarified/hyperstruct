@@ -13,6 +13,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Circle
 from matplotlib.patches import Ellipse
 from matplotlib.patches import FancyBboxPatch
+from numpy.typing import ArrayLike
 from scipy.special import ellipeinc
 
 
@@ -105,15 +106,6 @@ class Component:
 
     material: Material
     """material the cover is made of."""
-
-    def synthesis(self) -> None:
-        """The sizing method.
-
-        The sizing method collects all sizing routines and executes them
-        in the order of the `routines` list.
-        """
-        # This doesn't work. It's just a placeholder.
-        pass
 
 
 @dataclass
@@ -643,3 +635,24 @@ class Station:
             y = r * np.cos(theta) + self.vertical_centroid
 
         return (float(x), float(y))
+
+
+@dataclass
+class LoadCase:
+    """Loads representing a single LoadCase along a beam.
+
+    A LoadCase is just a pre-formatted numpy array with column assumptions, and some metadata.
+    The columns of the LoadCase.loads array are:
+        Station [in],
+        Applied Beam Shear [lbf],
+        Applied Moment [in-lbf],
+        Internal Beam Shear [lbf],
+        Internal Moment [in-lbf]
+
+    Note that only a single directional load is supported and assumed. For all components except
+    the Vertical Stabilizer, this is vertical (z). For the Vertical Stabilizer, this horizontal (y).
+    """
+
+    loads: ArrayLike
+    lcid: int = None
+    name: str = None
