@@ -443,6 +443,15 @@ class Cover(Component):
     RC: float = 0
     """radius of curvature."""
 
+    F_allow: float | None = None
+    """fatigue allowable stress for pressurization (25% Fty if not provided)."""
+
+    mach: float | None = None
+    """loadcase airspeed Mach number."""
+
+    altitude: float | None = None
+    """loadcase altitude, in thousands of feet."""
+
     V: float = 0
     """total vertical shear at the cut."""
 
@@ -579,7 +588,7 @@ class Cover(Component):
         else:
             return float(self.q / (self.c_r * self.material.F_su))
 
-    def thickness_pressure(self, F_allow: Any = None) -> Tuple[float, float]:
+    def thickness_pressure(self) -> Tuple[float, float]:
         """Thicknesses based on cover pressure.
 
         A required thickness is evaluated to resist hoop stress,
@@ -593,15 +602,13 @@ class Cover(Component):
         from zero to peak pressure 20,000 times during the vehicle's useful
         life, with a stress concentration factor of 4.0.
 
-        Args:
-            F_allow: Allowable stress (25% yield, if not provided)
 
         Returns:
             A tuple of (Land thickness, Field thickness).
         """
         b = min(self.D, self.L)
-        if not F_allow:
-            F_allow = self.material.F_ty / 4.0
+        if not self.F_allow:
+            self.F_allow = self.material.F_ty / 4.0
 
         # TODO: Lookup the vehicle-level load factors for the CG
         Nz_plus = 6
@@ -631,13 +638,13 @@ class Cover(Component):
         P_2 = P_o + rho * Nz_2 * h
 
         # Simple Hoop Stress
-        t_1 = P_1 * self.RC / F_allow
-        t_2 = P_2 * self.RC / F_allow
+        t_1 = P_1 * self.RC / self.F_allow
+        t_2 = P_2 * self.RC / self.F_allow
 
         # Strip Theory Edge thickness
-        t_3 = (1.646 * b * P_1**0.894 * self.material.E**0.394) / F_allow**1.288
+        t_3 = (1.646 * b * P_1**0.894 * self.material.E**0.394) / self.F_allow**1.288
         # Strip Theory Midspan thickness
-        t_4 = self.material.E**1.984 * (1.3769 * b * P_1**2.484) / F_allow**4.467
+        t_4 = self.material.E**1.984 * (1.3769 * b * P_1**2.484) / self.F_allow**4.467
 
         t_min = min(t_1, t_2, t_3, t_4)
 
@@ -646,7 +653,7 @@ class Cover(Component):
         else:
             return (float(t_min), float(t_min))
 
-    def panel_flutter(self, mach: float, altitude: float) -> float:
+    def panel_flutter(self) -> float:
         """Evaluate baseline thickness to avoid local panel flutter.
 
         The baseline thickness to make local panel flutter highly improbable
@@ -658,13 +665,11 @@ class Cover(Component):
         over for all Mach and altitudes corresponding to the flight
         envelope conditions of the aircraft.
 
-        Args:
-            mach: Mach Number
-            altitude: Altitude (in thousands of feet)
-
         Returns:
             A float of Field Thickness.
         """
+        mach = self.mach
+        altitude = self.altitude
         # Dynamic pressures based on standard day atmosphere.
         # Dynamic Pressure, q, in [psf]
         # Altitudes must be measured in [ft]
@@ -973,26 +978,19 @@ class MinorFrame(Component):
 
     def sizing(self) -> dict:
         """Calculates the MinorFrame sizing. [MINFR]."""
-        upper = {
-            "general_stability": self.general_stability(),
-            "acoustic_fatigue": self.acoustic_fatigue(),
-        }
-        lower = {
-            "general_stability": self.general_stability(),
-            "acoustic_fatigue": self.acoustic_fatigue(),
-        }
-        side = {
+        results = {
             "general_stability": self.general_stability(),
             "acoustic_fatigue": self.acoustic_fatigue(),
             # TODO: How do we simplify the post_buckled method...Fucking diagonal tension... FML
             "forced_crippling": self.post_buckled(stufffffffff),
         }
 
-        results = {"upper": upper, "lower": lower, "side": side}
-
         return results
 
 
+# TODO: We need to revisit the Longerons. Compressive portion is completely
+# blank, and the area property and sizing methods just don't smell right.
+# For now, we're just going for something functional.
 @dataclass
 class Longeron(Component):
     """Fuselage longitudinal member component.
@@ -1063,7 +1061,7 @@ class Longeron(Component):
         A_s: float,
         I_a: float,
     ) -> float:
-        """Thickness required to satisfy bending strength.
+        """Area required to satisfy bending strength.
 
         Longitudinal member sizing is dependent on the contribution of all
         copmonents that resist bending loads. This method accounts for the difference
@@ -1080,13 +1078,13 @@ class Longeron(Component):
         fiber stress according to the relationship of vertical coordinate versus
         extreme fiber coordinate.
 
-        Bending moment is assumed to be reactied by an internal coupled force system.
+        Bending moment is assumed to be reacted by an internal coupled force system.
         Thus, in the case of down-bending, the uper half of the shell sustains tension
         loads, and the lower half, compression loads; half of the moment is reacted
         in each half. Covers are totally effective in the tension sector of the
         fuselage. Cutouts eliminate cover contributions; proximity to cutouts degrade
         the effectiveness of the cover. The width of cutouts at other synthesis cuts
-        combined with longitudinal displacement and hsear lag slope of 2 to 1 is used
+        combined with longitudinal displacement and shear lag slope of 2 to 1 is used
         to determine the apparent effective width.
 
         Args:
@@ -1185,6 +1183,16 @@ class Longeron(Component):
         #     self.area = A_s2
 
         return 1.0
+
+    def sizing(self) -> float:
+        """Calculates the weight/in of the member."""
+        area_1 = self.bending_strength(stufff)
+        area_2 = self.post_buckled(stuffffffffff)
+
+        w_1 = self.material.rho * area_1
+        w_2 = self.material.rho * area_2
+
+        return max(w_1, w_2)
 
 
 # TODO: Bulkheads need major overhaul! This is where the internal geometry
@@ -2163,6 +2171,9 @@ class Fuselage:
     major_frames: Tuple[MajorFrame]
     """A set of MajorFrames with load introduction points."""
 
+    construction: str
+    """Construction method. ('stringer' or 'longeron')"""
+
     loadcase: LoadCase
     """A single loadcase to evaluate."""
 
@@ -2175,6 +2186,37 @@ class Fuselage:
 
     frame_model: MinorFrame
     """The MinorFrame model to use."""
+
+    def longeron_coords(
+        self, station: Station, phi: float | None = None, d: float | None = None
+    ) -> Tuple[float]:
+        """Vertical and horizontal coordinates of the longerons in a section.
+
+        Four primary longerons are assumed for longeron construction fuselages.
+        These elements may be located by either the angular definition (phi),
+        or as a fraction of the total fuselage section depth.
+
+        If the user provides a phi and d value, the d value will be ignored.
+
+        Args:
+            station (Station): The station geometry.
+            phi (float | None, optional): Clockwise angle. Defaults to None.
+            d (float | None, optional): Fraction of total depth. Defaults to None.
+
+        Returns:
+            Tuple[float]: Coordinates (y, z) of longeron centroid
+        """
+        if not phi:
+            return station.get_coords(phi)
+        elif not d:
+            if d >= 1:
+                y = station.wo
+            else:
+                zz = d * station.depth / 2 - station.doo
+                y = station.wo + np.sqrt(station.radius**2 - zz**2)
+            return (y, d * station.depth / 2)
+        else:
+            return (0, 0)
 
     def cut_geometry(self, start: Station, end: Station) -> Station:
         """Interpolate the geometry between the described stations.
@@ -2200,6 +2242,23 @@ class Fuselage:
             radius=np.mean([start.radius, end.radius]),
         )
         return interpolated
+
+    def get_Q(self, geom: Station, **kwargs) -> float:
+        """Calculate the first moment of area for the section.
+
+        The first moment of area calculation assumes all areas are lumped
+        into the bending element centroids. To calculate, simply sum all
+        the areas by their vertical distance. We calculate this value for
+        the midpoint of the fuselage, where the maximum value will be.
+        """
+        if self.construction == "longeron":
+            y, z = self.longeron_coords(geom, **kwargs)
+            return z * self.long_model.area
+        elif self.construction == "stringer":
+            # TODO:
+            raise NotImplementedError()
+        else:
+            raise ValueError("Construction method must be 'stringer' or 'longeron'!")
 
     def synthesis(self, frame_spacing: float | None = None) -> None:
         """The full multistation synthesis loop. [FUSSHL].
@@ -2245,18 +2304,25 @@ class Fuselage:
             else:
                 # interpolate the geometry between the current station and the next
                 geom = self.cut_geometry(station, self.stations[k + 1])
+                chunk_length = self.stations[k + 1].number - station.number
 
             _, cut_shear, cut_bending = self.lookup_loads(geom.number, self.loads)
 
             # Should we use a provided spacing or conduct a frame spacing search?
             if not frame_spacing:
-                cut_results = self.frame_search(V=cut_shear, M=cut_bending, geom=geom)
+                cut_results = self.frame_search(
+                    V=cut_shear, M=cut_bending, geom=geom, chunk_length=chunk_length
+                )
             else:
                 cut_results = self.size_shell(
-                    V=cut_shear, M=cut_bending, geom=geom, frame_spacing=frame_spacing
+                    V=cut_shear,
+                    M=cut_bending,
+                    geom=geom,
+                    frame_spacing=frame_spacing,
+                    chunk_length=chunk_length,
                 )
 
-            # TODO: Not implemented
+            # TODO: Not implemented. Is this different that size_shell()?
             _ = self.size_station()
 
     def net_loads(
@@ -2446,10 +2512,10 @@ class Fuselage:
             m = np.interp(x, xp=xp, fp=fp_m)
             return (x, np.float64(v), np.float64(m))
 
-    def stringer_search(self):
+    def stringer_search(self, **kwargs):
         """Search for weight-optimum stringer/longeron spacing. [LONGS]."""
         # TODO: We need to calculate these at each longeron search step
-        self.cover_model.Q = self.get_Q()
+        self.cover_model.Q = self.get_Q(**kwargs)
         self.cover_modelcover.I = self.get_I()
 
         pass
@@ -2460,6 +2526,7 @@ class Fuselage:
         V: float,
         M: float,
         geom: Station,
+        chunk_length: float,
     ) -> NamedTuple:
         """Search for weight-optimum frame spacing. [FPANEL].
 
@@ -2472,7 +2539,9 @@ class Fuselage:
         max_spacing = max(geom.depth, geom.width) / 2
 
         for spacing in np.linspace(min_spacing, max_spacing, num=10):
-            results_obj = self.size_shell(V=V, M=M, frame_spacing=spacing, geom=geom)
+            results_obj = self.size_shell(
+                V=V, M=M, frame_spacing=spacing, geom=geom, chunk_length=chunk_length
+            )
             if spacing > min_spacing:
                 # The first iteration won't have previous results
                 if results_obj.weight > previous_results.weight:
@@ -2488,6 +2557,7 @@ class Fuselage:
         M: float,
         frame_spacing: float,
         geom: Station,
+        chunk_length: float,
     ) -> NamedTuple:
         """Conducts analysis point sizing of Fuselage shell structure.
 
@@ -2497,18 +2567,50 @@ class Fuselage:
         self.cover_model.V = V
         self.cover_model.L = frame_spacing
         self.cover_model.D = long_spacing
+        self.cover_model.mach = mach
+        self.cover_model.altitude = altitude
 
         self.frame_model.M = M
         self.frame_model.frame_spacing = frame_spacing
         self.frame_model.diameter = np.mean([geom.depth, geom.width])
 
         self.long_model.M = M
-        # TODO: What else does the longeorn model need?
 
         # Run the class sizing routines
-        self.cover_model.sizing()
-        self.frame_model.sizing()
-        self.long_model.sizing()
+        cover_results = self.cover_model.sizing()
+        frame_results = self.frame_model.sizing()
+        long_weight = self.long_model.sizing()
 
         # Caculate the weight and build the results object
-        pass
+        # All weights are total lbs for this chunk
+        cover_rho = self.cover_model.material.rho
+        upper_s = geom.upper_panel
+        lower_s = geom.lower_panel
+        side_s = geom.side_panel
+        cover_upper_weight = (
+            upper_s * cover_rho * max(cover_results["upper"].values()) * chunk_length
+        )
+        cover_lower_weight = (
+            lower_s * cover_rho * max(cover_results["lower"].values()) * chunk_length
+        )
+        cover_side_weight = (
+            side_s * cover_rho * max(cover_results["side"].values()) * chunk_length
+        )
+
+        perimeter = geom.upper_panel + geom.lower_panel + 2 * geom.side_panel
+        # With thickness calculated from sizing, area is automatically updated for us.
+        single_weight = (
+            self.frame_model.material.rho * self.frame_model.area * perimeter
+        )
+        frame_weight = single_weight * chunk_length / frame_spacing
+
+        long_weight = long_weight * perimeter / long_spacing * chunk_length
+
+        weights = {
+            "covers_upper": cover_upper_weight,
+            "covers_lower": cover_lower_weight,
+            "covers_side": cover_side_weight,
+            "minor_frames": frame_weight,
+            "longerons": long_weight,
+        }
+        return weights
