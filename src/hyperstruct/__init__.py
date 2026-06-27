@@ -642,7 +642,7 @@ class LoadCase:
     """Loads representing a single LoadCase along a beam.
 
     A LoadCase is just a pre-formatted numpy array with column assumptions, and some metadata.
-    The columns of the LoadCase.loads array are:
+    The columns of the LoadCase.fuse_loads array are:
         Station [in],
         Applied Beam Shear [lbf],
         Applied Moment [in-lbf],
@@ -653,6 +653,8 @@ class LoadCase:
     the Vertical Stabilizer, this is vertical (z). For the Vertical Stabilizer, this horizontal (y).
     """
 
-    loads: ArrayLike
+    fuse_loads: ArrayLike
     lcid: int = None
     name: str = None
+    mach: float | None = None
+    altitude: float | None = None

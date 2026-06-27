@@ -18,14 +18,14 @@ https://www.lockheedmartin.com/content/dam/lockheed-martin/aero/documents/sustai
 import matplotlib.pyplot as plt
 import numpy as np
 
-from hyperstruct import Material
+from hyperstruct import Material, LoadCase
 from hyperstruct import Station
 from hyperstruct import composite_cg
 
 # from hyperstruct.fuselage import Cover
 # from hyperstruct.fuselage import ForcedCrippling
 from hyperstruct.fuselage import Fuselage
-from hyperstruct.fuselage import MajorFrame
+from hyperstruct.fuselage import MajorFrame, MinorFrame, Cover, Longeron
 
 
 # from hyperstruct.fuselage import MinorFrame
@@ -267,7 +267,24 @@ print(25 * "-")
 print(p_ext)
 print(17 * " " + f"{np.sum(p_ext[:, 1]):.2f}")
 
-fuse = Fuselage(stations=stations, major_frames=frames)
+cover_model = Cover(
+    material=al2024, milled=False, L=30, D=20, R=1, RC=25
+)
+long_model = Longeron(
+    material=al2024, b=2.0, t_s=0.1, k=0.8
+)
+frame_model = MinorFrame(
+    material=al2024, c=4.0, b=3.0, construction="longeron"
+)
+
+fuse = Fuselage(
+    stations=stations, 
+    major_frames=frames,
+    construction="longeron",
+    cover_model=cover_model,
+    long_model=long_model,
+    frame_model=frame_model
+)
 loads = fuse.net_loads(w_fus, w_fc, p_air, p_ext)
 fig, (ax1, ax2) = fuse.vmt_diagram(w_fus, w_fc, p_air, p_ext)
 _ = fig.suptitle(f"{FNZ0:.1f}g Taxi, WC=73kip, xCG={XCG:.0f}[in]")
@@ -290,11 +307,13 @@ plt.show()
 #
 #   S I Z I N G
 #
-# The synthesis method currently doesn't do anything...
-# fuse.synthesis()
+
+lc = LoadCase(fuse_loads=loads, lcid=31, name="3g Taxi", mach=0.1, altitude=0.0)
 
 # Major Frames
 print("Major Frame Sizing:")
 for frame in frames:
     frame.synthesis()
     print(f"   FS {frame.fs_loc}: {frame.weight:.1f}[lbf]")
+
+fuse.synthesis(loadcase=lc)
