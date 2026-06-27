@@ -1117,7 +1117,6 @@ class Longeron(Component):
         to determine the apparent effective width.
 
         Args:
-            M_ext: External moment at the cut
             t: cover thickness
             d: fuselage depth
             I_t: cover moment of inertia, as a function of thickness
@@ -1215,9 +1214,26 @@ class Longeron(Component):
 
     def sizing(self) -> float:
         """Calculates the weight/in of the member."""
-        # TODO:
-        area_1 = self.bending_strength(stufff)
-        area_2 = self.post_buckled(stuffffffffff)
+        ctx = self.context
+        # Centroidal cover inertia is 1/12 b*h^3
+        # Effective width is twice the longeron flange width.
+        cover_A = 2 * self.b * ctx.t_c
+        cover_I = 2 * self.b * ctx.t_c ** 3 / 12
+        # Parallel axis theorem to get inertia of cover about centroid of longeron
+        cover_I = cover_I + cover_A * (self.b / 2) ** 2
+
+        area_1 = self.bending_strength(
+            t=ctx.t_c,
+            d=ctx.geom.depth,
+            I_t=cover_I,
+            l_p=ctx.geom.upper_panel,
+            # TODO: No cutouts currently supported!
+            rtu=0.0,
+            A_s=self.area_effective,
+            I_a=self.area_effective
+        )
+        # area_2 = self.post_buckled(stuffffffffff)
+        area_2 = 0.0
 
         w_1 = self.material.rho * area_1
         w_2 = self.material.rho * area_2
@@ -2348,7 +2364,7 @@ class Fuselage:
         else:
             raise ValueError("Construction method must be 'stringer' or 'longeron'!")
 
-    def synthesis(self, loadcase: LoadCase, stringer_spacing: float | None = None, frame_spacing: float | None = None) -> None:
+    def synthesis(self, loadcase: LoadCase, stringer_spacing: float | None = None, frame_spacing: float | None = None) -> list:
         """The full multistation synthesis loop. [FUSSHL].
 
         Geometry definitions and constraints, loads, and design criteria are all
@@ -2381,13 +2397,17 @@ class Fuselage:
             loadcase (LoadCase): The loadcase to evaluate.
             stringer_spacing (Float|None) : Provide stringer spacing or search for min frame spacing by leaving blank. Default None.
             frame_spacing (Float|None) : Provide frame spacing or search for min frame spacing by leaving blank. Default None.
+
+        Returns:
+            list of tuples (cut_location: float, cut_results: NamedTuple)
         """
         # Doing the MajorFrame weight first.
         for frame in self.major_frames:
             frame.synthesis()
 
+        results = []
         for k, station in enumerate(self.stations):
-            if k == len(self.stations):
+            if k == len(self.stations)-1:
                 # the last station in the tuple is the tail geometry,
                 # so no synthesis cut aft of the tail section.
                 continue
@@ -2437,8 +2457,9 @@ class Fuselage:
                     loadcase=loadcase
                 )
 
-            # TODO: Not implemented. Is this different that size_shell()?
-            _ = self.size_station()
+            results.append((geom.number, cut_results))
+
+        return results
 
     def net_loads(
         self,
@@ -2665,8 +2686,8 @@ class Fuselage:
             )
 
             # Update constituent models that depend on spacing.
-            self.cover_model.Q = self.get_Q(**kwargs)
-            self.cover_model.I = self.get_I(**kwargs)
+            self.cover_model.Q = self.get_Q(geom=geom, **kwargs)
+            self.cover_model.I = self.get_I(geom=geom, **kwargs)
 
             # Evaluate the performance criteria
             if spacing > start:

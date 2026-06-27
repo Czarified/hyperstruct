@@ -17,6 +17,7 @@ https://www.lockheedmartin.com/content/dam/lockheed-martin/aero/documents/sustai
 
 import matplotlib.pyplot as plt
 import numpy as np
+from rich import print
 
 from hyperstruct import Material, LoadCase
 from hyperstruct import Station
@@ -301,7 +302,7 @@ _ = ax1.plot(x, v, marker="^", color="k")
 _ = ax2.plot(x, m, marker="^", color="k", label="Analysis Point")
 _ = ax2.legend()
 
-plt.show()
+# plt.show()
 
 
 #
@@ -316,4 +317,16 @@ for frame in frames:
     frame.synthesis()
     print(f"   FS {frame.fs_loc}: {frame.weight:.1f}[lbf]")
 
-fuse.synthesis(loadcase=lc)
+results = fuse.synthesis(loadcase=lc)
+
+print(results)
+
+x = [float(x[0]) for x in results]
+y = [float(x[1].weight) for x in results]
+fig, ax = plt.subplots(figsize=(7,4))
+_ = ax.bar(x, y, width=100, color='k')
+_ = ax.set_xlabel("Fuselage Station, $FS$, [in]")
+_ = ax.set_ylabel("Weight, $W$, [lbs]")
+_ = fig.suptitle(f"{FNZ0:.1f}g Taxi, xCG={XCG:.0f}[in]")
+
+plt.show()
