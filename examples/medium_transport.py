@@ -19,14 +19,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 from rich import print
 
-from hyperstruct import Material, LoadCase
+from hyperstruct import LoadCase
+from hyperstruct import Material
 from hyperstruct import Station
 from hyperstruct import composite_cg
 
 # from hyperstruct.fuselage import Cover
 # from hyperstruct.fuselage import ForcedCrippling
+from hyperstruct.fuselage import Cover
 from hyperstruct.fuselage import Fuselage
-from hyperstruct.fuselage import MajorFrame, MinorFrame, Cover, Longeron
+from hyperstruct.fuselage import Longeron
+from hyperstruct.fuselage import MajorFrame
+from hyperstruct.fuselage import MinorFrame
 
 
 # from hyperstruct.fuselage import MinorFrame
@@ -141,9 +145,9 @@ print(f"           CG = {_cg:.2f} [in]")
 
 #
 # Landing Gear Loads Calculation
-#       Taxi, WC=73k, 2.0g
+#       Taxi, WC=73k, 3.0g
 #
-FNZ0 = 2.0
+FNZ0 = 3.0
 XNGG = 165
 XMGG = 620
 XCG = _cg
@@ -268,23 +272,17 @@ print(25 * "-")
 print(p_ext)
 print(17 * " " + f"{np.sum(p_ext[:, 1]):.2f}")
 
-cover_model = Cover(
-    material=al2024, milled=False, L=30, D=20, R=1, RC=25
-)
-long_model = Longeron(
-    material=al2024, b=2.0, t_s=0.1, k=0.8
-)
-frame_model = MinorFrame(
-    material=al2024, c=4.0, b=3.0, construction="longeron"
-)
+cover_model = Cover(material=al2024, milled=False, L=30, D=20, R=0, RC=25)
+long_model = Longeron(material=al2024, b=2.0, t_s=0.1, k=0.8)
+frame_model = MinorFrame(material=al2024, c=4.0, b=3.0, construction="longeron")
 
 fuse = Fuselage(
-    stations=stations, 
+    stations=stations,
     major_frames=frames,
     construction="longeron",
     cover_model=cover_model,
     long_model=long_model,
-    frame_model=frame_model
+    frame_model=frame_model,
 )
 loads = fuse.net_loads(w_fus, w_fc, p_air, p_ext)
 fig, (ax1, ax2) = fuse.vmt_diagram(w_fus, w_fc, p_air, p_ext)
@@ -309,7 +307,9 @@ _ = ax2.legend()
 #   S I Z I N G
 #
 
-lc = LoadCase(fuse_loads=loads, lcid=31, name="3g Taxi", mach=0.1, altitude=0.0)
+lc = LoadCase(
+    fuse_loads=loads, lcid=31, name="3g Taxi", mach=0.1, altitude=0.0, cg_x=XCG
+)
 
 # Major Frames
 print("Major Frame Sizing:")
@@ -323,10 +323,11 @@ print(results)
 
 x = [float(x[0]) for x in results]
 y = [float(x[1].weight) for x in results]
-fig, ax = plt.subplots(figsize=(7,4))
-_ = ax.bar(x, y, width=100, color='k')
+fig, ax = plt.subplots(figsize=(7, 4))
+_ = ax.bar(x, y, width=100, color="k")
 _ = ax.set_xlabel("Fuselage Station, $FS$, [in]")
 _ = ax.set_ylabel("Weight, $W$, [lbs]")
 _ = fig.suptitle(f"{FNZ0:.1f}g Taxi, xCG={XCG:.0f}[in]")
 
-plt.show()
+
+# plt.show()

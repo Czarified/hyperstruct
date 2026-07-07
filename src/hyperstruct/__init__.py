@@ -658,3 +658,6 @@ class LoadCase:
     name: str = None
     mach: float | None = None
     altitude: float | None = None
+    cg_x: float | None = None
+    cg_y: float | None = None
+    cg_z: float | None = None
