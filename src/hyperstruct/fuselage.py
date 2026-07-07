@@ -902,6 +902,9 @@ class MinorFrame(Component):
     diameter: float | None = None
     """The fuselage diameter at the cut."""
 
+    min_gauge: float | None = 0.020
+    """The minimum gauge thickness (default 0.020)."""
+
     context: ShellContext | None = None
     """Sizing context."""
 
@@ -1043,6 +1046,7 @@ class MinorFrame(Component):
             "general_stability": self.general_stability(),
             "acoustic_fatigue": self.acoustic_fatigue(),
             "forced_crippling": self.post_buckled(),
+            "min_gauge": self.min_gauge,
         }
 
         return results
@@ -2902,6 +2906,10 @@ class Fuselage:
             )
 
         frame_results = self.frame_model.sizing()
+        logger.debug(
+            f"Setting MinorFrame flange thickness to {max(frame_results.values()):.3f}"
+        )
+        self.frame_model.t_r = max(frame_results.values())
         long_weight = self.long_model.sizing()
 
         # Caculate the weight and build the results object
@@ -2921,11 +2929,14 @@ class Fuselage:
         )
 
         perimeter = geom.upper_panel + geom.lower_panel + 2 * geom.side_panel
+        logger.debug(f"Frame Perimeter = {perimeter:.2f}")
         # With thickness calculated from sizing, area is automatically updated for us.
         single_weight = (
             self.frame_model.material.rho * self.frame_model.area * perimeter
         )
+        logger.debug(f"Single Frame Weight = {single_weight:.2f}")
         frame_weight = single_weight * chunk_length / frame_spacing
+        logger.debug(f"Total Frame Weight = {frame_weight:.2f}")
 
         long_weight = long_weight * perimeter / long_spacing * chunk_length
 
