@@ -35,7 +35,7 @@ from hyperstruct import Station
 
 FORMAT = "%(asctime)s %(message)s"
 logging.basicConfig(
-    level="DEBUG",
+    level="INFO",
     format=FORMAT,
     datefmt="[%X]",
     handlers=[
@@ -499,6 +499,9 @@ class Cover(Component):
     I: float = 0
     """area moment of inertia of the bending elements."""
 
+    min_gauge: float | None = 0.020
+    """minimum gauge thickness (default 0.020)."""
+
     context: ShellContext | None = None
     """Sizing context."""
 
@@ -844,11 +847,13 @@ class Cover(Component):
         upper_t["pressure"] = self.thickness_pressure()
         upper_t["panel_flutter"] = self.panel_flutter()
         upper_t["acoustic"] = self.acoustic_fatigue()
+        upper_t["min_gauge"] = self.min_gauge
         # Lower
         lower_t = {}
         lower_t["pressure"] = self.thickness_pressure()
         lower_t["panel_flutter"] = self.panel_flutter()
         lower_t["acoustic"] = self.acoustic_fatigue()
+        lower_t["min_gauge"] = self.min_gauge
         # Side
         side_t = {}
         side_t["pressure"] = self.thickness_pressure()
@@ -857,6 +862,7 @@ class Cover(Component):
         side_t["post_buckled"] = self.field_thickness_postbuckled()
         side_t["panel_flutter"] = self.panel_flutter()
         side_t["acoustic"] = self.acoustic_fatigue()
+        side_t["min_gauge"] = self.min_gauge
 
         results = {"upper": upper_t, "lower": lower_t, "side": side_t}
 
@@ -2949,7 +2955,7 @@ class Fuselage:
         }
         total_weight = sum(weights.values())
 
-        ResultsObj = namedtuple("Results", ["weights_dict", "weight"])
-        results = ResultsObj(weights, total_weight)
+        ResultsObj = namedtuple("Results", ["weights_dict", "weight", "segment_length"])
+        results = ResultsObj(weights, total_weight, chunk_length)
 
         return results
