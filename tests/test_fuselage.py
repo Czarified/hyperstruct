@@ -13,7 +13,9 @@ from hyperstruct import Station
 from hyperstruct.fuselage import Cover
 from hyperstruct.fuselage import ForcedCrippling
 from hyperstruct.fuselage import Fuselage
+from hyperstruct.fuselage import Longeron
 from hyperstruct.fuselage import MajorFrame
+from hyperstruct.fuselage import MinorFrame
 
 
 @pytest.fixture
@@ -103,9 +105,36 @@ def b_frame(aluminum: Material, b_station: Station) -> Tuple[MajorFrame]:
 
 
 @pytest.fixture
-def fuselage(a_station: Tuple[Station], b_frame: Tuple[MajorFrame]) -> Fuselage:
+def basic_longeron(aluminum: Material) -> Longeron:
+    """Basic Longeron."""
+    long_model = Longeron(material=aluminum, b=2.0, t_s=0.1, k=0.8)
+    return long_model
+
+
+@pytest.fixture
+def basic_frame(aluminum: Material) -> MinorFrame:
+    """Basic MinorFrame."""
+    frame_model = MinorFrame(material=aluminum, c=4.0, b=3.0, construction="longeron")
+    return frame_model
+
+
+@pytest.fixture
+def fuselage(
+    a_station: Tuple[Station],
+    b_frame: Tuple[MajorFrame],
+    cover_model: Cover = unmilled_cover,
+    long_model: Longeron = basic_longeron,
+    frame_model: MinorFrame = basic_frame,
+) -> Fuselage:
     """Build a Fuselage class."""
-    fuse = Fuselage(stations=a_station, major_frames=b_frame)
+    fuse = Fuselage(
+        stations=a_station,
+        major_frames=b_frame,
+        construction="longeron",
+        cover_model=cover_model,
+        long_model=long_model,
+        frame_model=frame_model,
+    )
     return fuse
 
 
@@ -151,22 +180,22 @@ def test_unmilled_shear_and_net(unmilled_cover: Cover) -> None:
 
 def test_unmilled_pressure(unmilled_cover: Cover) -> None:
     """Test an unmilled cover."""
-    t_l, t_c = unmilled_cover.thickness_pressure()
+    t_l = unmilled_cover.thickness_pressure()
     assert isinstance(t_l, float)
-    assert isinstance(t_c, float)
 
 
 def test_unmilled_flutter(unmilled_cover: Cover) -> None:
     """Test an unmilled cover."""
-    t_c = unmilled_cover.panel_flutter(mach=1.3, altitude=5000)
+    unmilled_cover.mach = 1.3
+    unmilled_cover.altitude = 5000
+    t_c = unmilled_cover.panel_flutter()
     assert isinstance(t_c, float)
 
 
 def test_unmilled_acoustic(unmilled_cover: Cover) -> None:
     """Test an unmilled cover."""
-    t_l, t_c = unmilled_cover.acoustic_fatigue()
+    t_l = unmilled_cover.acoustic_fatigue()
     assert isinstance(t_l, float)
-    assert isinstance(t_c, float)
 
 
 def test_diagonal_tension(diag_ten: ForcedCrippling) -> None:

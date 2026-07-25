@@ -330,4 +330,4 @@ _ = ax.set_ylabel("Weight, $W$, [lbs]")
 _ = fig.suptitle(f"{FNZ0:.1f}g Taxi, xCG={XCG:.0f}[in]")
 
 
-# plt.show()
+plt.show()

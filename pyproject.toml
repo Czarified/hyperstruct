@@ -25,6 +25,7 @@ scipy = ">=1.14.1, <2.0"
 matplotlib = ">=3.10.1, <4.0"
 pytest-check = ">=2.5.3, <3.0"
 pandas = ">=2.3.0, <3.0"
+rich = "^15.0.0"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.8.0"

@@ -632,7 +632,7 @@ class Cover(Component):
         else:
             return float(self.q / (self.c_r * self.material.F_su))
 
-    def thickness_pressure(self) -> Tuple[float, float]:
+    def thickness_pressure(self) -> Tuple[float, float] | float:
         """Thicknesses based on cover pressure.
 
         A required thickness is evaluated to resist hoop stress,
@@ -779,7 +779,7 @@ class Cover(Component):
 
         return float(t_b)
 
-    def acoustic_fatigue(self) -> Tuple[float, float]:
+    def acoustic_fatigue(self) -> Tuple[float, float] | float:
         """Thickness requirements based on acoustic fatigue.
 
         Assumptions are:
@@ -2290,7 +2290,7 @@ class Fuselage:
         Args:
             station (Station): The station geometry.
             phi (float | None, optional): Clockwise angle. Defaults to None.
-            d (float, optional): Fraction of total depth. Defaults to 1.0.
+            d (float): Fraction of total depth. Defaults to 1.0.
 
         Returns:
             Tuple[float]: Coordinates (y, z) of longeron centroid
@@ -2331,7 +2331,7 @@ class Fuselage:
         )
         return interpolated
 
-    def get_Q(self, geom: Station, ds: float | None = None, **kwargs) -> float:
+    def get_q(self, geom: Station, ds: float | None = None, **kwargs) -> float:
         """Calculate the first moment of area for the section.
 
         The first moment of area calculation assumes all areas are lumped
@@ -2381,7 +2381,7 @@ class Fuselage:
         else:
             raise ValueError("Construction method must be 'stringer' or 'longeron'!")
 
-    def get_I(self, geom: Station, **kwargs) -> float:
+    def get_inertia(self, geom: Station, **kwargs) -> float:
         """Calculate the second moment of area for the section.
 
         The second moment of area is calculated similarly to the first moment
@@ -2394,9 +2394,14 @@ class Fuselage:
 
         Args:
             geom (Station): The station geometry.
+            kwargs (dict): Keyword arguments.
 
         Returns:
             float: The second moment of area for the upper quadrant.
+
+        Raises:
+            NotImplementedError: For Stringer construction I.
+            ValueError: If parent does not have `construction` attribute defined correctly.
         """
         if self.construction == "longeron":
             y, z = self.longeron_coords(geom, **kwargs)
@@ -2729,6 +2734,7 @@ class Fuselage:
             M (float): Beam bending moment at the cut.
             chunk_length (float): Chunk length from the synthesis routine.
             loadcase (LoadCase): The loadcase from synthesis.
+            kwargs (dict): Keyword arguments.
 
         Returns:
             NamedTuple: weight results
@@ -2748,8 +2754,8 @@ class Fuselage:
             )
 
             # Update constituent models that depend on spacing.
-            self.cover_model.Q = self.get_Q(geom=geom, **kwargs)
-            self.cover_model.I = self.get_I(geom=geom, **kwargs)
+            self.cover_model.Q = self.get_q(geom=geom, **kwargs)
+            self.cover_model.I = self.get_inertia(geom=geom, **kwargs)
 
             # Evaluate the performance criteria
             if spacing > start:
@@ -2783,6 +2789,7 @@ class Fuselage:
             min_spacing (float): Frame spacing, inches.
             V (float): Beam shear load at the cut.
             M (float): Beam bending moment at the cut.
+            long_spacing (float): Longeron spacing.
             geom (Station): The station geometry.
             chunk_length (float): Chunk length from the synthesis routine.
             loadcase (LoadCase): The loadcase from synthesis.
@@ -2793,6 +2800,7 @@ class Fuselage:
         # Is 10x min an appropriate ceiling? So 2 to 20 or 6 to 60? Probably overkill if anything.
         max_spacing = 10 * min_spacing
 
+        previous_results = None
         for spacing in np.linspace(min_spacing, max_spacing, num=20):
             results_obj = self.size_shell(
                 V=V,
@@ -2837,6 +2845,10 @@ class Fuselage:
 
         Returns:
             NamedTuple: The results object with weight breakdown.
+
+        Raises:
+            NotImplementedError: For stringer construction.
+            TypeError: If the Cover methods return multiple thickness values.
         """
         # Set the instance variables for our cut loads
         self.cover_model.V = V
