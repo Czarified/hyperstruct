@@ -4,7 +4,6 @@ from importlib.metadata import version
 
 import click
 
-
 __version__ = version("hyperstruct")
 
 
