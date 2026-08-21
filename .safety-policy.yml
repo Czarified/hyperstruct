@@ -1,0 +1,7 @@
+# Safety CLI policy configuration file
+# For details, see: https://docs.safetycli.com
+
+scanning-settings:
+  exclude:
+    - ".poetry/**"
+    - ".nox/**"

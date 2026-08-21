@@ -5,12 +5,15 @@ The fuselage module operates as a stand-alone program or in conjuction with othe
 This file contains all global variables, classes, and functions related to fuselage weight synthesis.
 """
 
+import logging
+from collections import namedtuple
 from copy import copy
 from dataclasses import dataclass
 from dataclasses import field
 
 # from typing import Dict
 from typing import Any
+from typing import NamedTuple
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -21,11 +24,47 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 from numpy.typing import ArrayLike
+from rich.logging import RichHandler
 from scipy.optimize import minimize_scalar
 
 from hyperstruct import Component
+from hyperstruct import LoadCase
 from hyperstruct import Material
 from hyperstruct import Station
+
+FORMAT = "%(asctime)s %(message)s"
+logging.basicConfig(
+    level="INFO",
+    format=FORMAT,
+    datefmt="[%X]",
+    handlers=[
+        RichHandler(
+            markup=True, rich_tracebacks=True, tracebacks_suppress=["matplotlib", "PIL"]
+        )
+    ],
+)
+logger = logging.getLogger(__name__)
+nolog = logging.getLogger("PIL").propagate = False
+nolog = logging.getLogger("matplotlib").propagate = False
+
+
+@dataclass
+class ShellContext:
+    """Context object passing shell evaluation properties to components."""
+
+    geom: Station
+    V: float
+    M: float
+    long_spacing: float
+    frame_spacing: float
+    cover_material: Material | None = None
+    long_material: Material | None = None
+    t_c: float | None = None
+    RC: float | None = None
+    f_s: float | None = None
+    f_scr: float | None = None
+    sum_z_sq: float | None = None
+    Z: float | None = None
 
 
 @dataclass
@@ -441,6 +480,15 @@ class Cover(Component):
     RC: float = 0
     """radius of curvature."""
 
+    F_allow: float | None = None
+    """fatigue allowable stress for pressurization (25% Fty if not provided)."""
+
+    mach: float | None = None
+    """loadcase airspeed Mach number."""
+
+    altitude: float | None = None
+    """loadcase altitude, in thousands of feet."""
+
     V: float = 0
     """total vertical shear at the cut."""
 
@@ -449,6 +497,12 @@ class Cover(Component):
 
     I: float = 0
     """area moment of inertia of the bending elements."""
+
+    min_gauge: float | None = 0.020
+    """minimum gauge thickness (default 0.020)."""
+
+    context: ShellContext | None = None
+    """Sizing context."""
 
     @property
     def c_r(self) -> float:
@@ -577,7 +631,7 @@ class Cover(Component):
         else:
             return float(self.q / (self.c_r * self.material.F_su))
 
-    def thickness_pressure(self, F_allow: Any = None) -> Tuple[float, float]:
+    def thickness_pressure(self) -> Tuple[float, float] | float:
         """Thicknesses based on cover pressure.
 
         A required thickness is evaluated to resist hoop stress,
@@ -591,27 +645,33 @@ class Cover(Component):
         from zero to peak pressure 20,000 times during the vehicle's useful
         life, with a stress concentration factor of 4.0.
 
-        Args:
-            F_allow: Allowable stress (25% yield, if not provided)
 
         Returns:
             A tuple of (Land thickness, Field thickness).
         """
+        logger.debug("COVER COMPONENT SIZING")
         b = min(self.D, self.L)
-        if not F_allow:
-            F_allow = self.material.F_ty / 4.0
+        if not self.F_allow:
+            self.F_allow = self.material.F_ty / 4.0
 
         # TODO: Lookup the vehicle-level load factors for the CG
+        logger.debug("Load Factors at Aircraft CG:")
         Nz_plus = 6
         Nz_minus = -3
+        logger.debug(f"Nz_plus = {Nz_plus:.0f}, Nz_minus = {Nz_minus:.0f}")
 
         # TODO: Lookup the vehicle-level pitch accelerations
         # Assume the pitch acceleration units are radians per second per second
-        Q_dot = 6.9
+        # As a default value, we'll use a completely made up number that AI tells me
+        # is roughly the order of magnitude for a combat maneuver in a transport plane.
+        Q_dot = 0.349
 
         # 386.0886 [in/s2] is the gravitational acceleration
-        Nz_1 = Nz_plus + Q_dot * self.R * 386.0886
-        Nz_2 = Nz_minus + Q_dot * self.R * 386.0886
+        Nz_1 = Nz_plus + Q_dot * self.R / 386.0886
+        Nz_2 = Nz_minus - Q_dot * self.R / 386.0886
+        logger.debug("Load Factors at Cover:")
+        logger.debug(f"R = {self.R:.2f} (distance from CG to cut)")
+        logger.debug(f"Nz_plus = {Nz_1:.1f}, Nz_minus = {Nz_2:.1f}")
 
         # TODO: Lookup the fluid density from the vehicle
         #       Should this default to air for cabin fluid?
@@ -627,24 +687,31 @@ class Cover(Component):
 
         P_1 = P_o + rho * Nz_1 * h
         P_2 = P_o + rho * Nz_2 * h
+        logger.debug("Pressure Values:")
+        logger.debug(f"   P_1 = {P_1:.2f}")
+        logger.debug(f"   P_2 = {P_2:.2f}")
+        logger.debug(f"    RC = {self.RC:.2f}")
 
         # Simple Hoop Stress
-        t_1 = P_1 * self.RC / F_allow
-        t_2 = P_2 * self.RC / F_allow
+        t_1 = P_1 * self.RC / self.F_allow
+        t_2 = P_2 * self.RC / self.F_allow
+        logger.debug("   Hoop Stress:")
+        logger.debug(f"      t_1 = {t_1:.3f}")
+        logger.debug(f"      t_2 = {t_2:.3f}")
 
         # Strip Theory Edge thickness
-        t_3 = (1.646 * b * P_1**0.894 * self.material.E**0.394) / F_allow**1.288
+        t_3 = (1.646 * b * P_1**0.894 * self.material.E**0.394) / self.F_allow**1.288
         # Strip Theory Midspan thickness
-        t_4 = self.material.E**1.984 * (1.3769 * b * P_1**2.484) / F_allow**4.467
+        t_4 = self.material.E**1.984 * (1.3769 * b * P_1**2.484) / self.F_allow**4.467
 
         t_min = min(t_1, t_2, t_3, t_4)
 
         if self.milled:
             return (float(t_3), float(t_min))
         else:
-            return (float(t_min), float(t_min))
+            return float(t_min)
 
-    def panel_flutter(self, mach: float, altitude: float) -> float:
+    def panel_flutter(self) -> float:
         """Evaluate baseline thickness to avoid local panel flutter.
 
         The baseline thickness to make local panel flutter highly improbable
@@ -656,13 +723,11 @@ class Cover(Component):
         over for all Mach and altitudes corresponding to the flight
         envelope conditions of the aircraft.
 
-        Args:
-            mach: Mach Number
-            altitude: Altitude (in thousands of feet)
-
         Returns:
             A float of Field Thickness.
         """
+        mach = self.mach
+        altitude = self.altitude
         # Dynamic pressures based on standard day atmosphere.
         # Dynamic Pressure, q, in [psf]
         # Altitudes must be measured in [ft]
@@ -695,6 +760,9 @@ class Cover(Component):
             )
         elif mach > 2.0:
             FM = np.sqrt(mach**2 - 1)
+        else:
+            # Mach is below supersonic. Panel Flutter isn't a concern.
+            FM = 10000
 
         # Length/Width parameter
         LW = self.L / self.D
@@ -710,7 +778,7 @@ class Cover(Component):
 
         return float(t_b)
 
-    def acoustic_fatigue(self) -> Tuple[float, float]:
+    def acoustic_fatigue(self) -> Tuple[float, float] | float:
         """Thickness requirements based on acoustic fatigue.
 
         Assumptions are:
@@ -753,7 +821,51 @@ class Cover(Component):
         f_l = 1.0794 + 0.000143 * x_l - 0.076475 * (1 / x_l) - 0.29969 * np.log(x_l)
         f_c = 1.0794 + 0.000143 * x_c - 0.076475 * (1 / x_c) - 0.29969 * np.log(x_c)
 
-        return (float(f_l * t_l), float(f_c * t_c))
+        # We return the max thickness for conservatism
+        # TODO: Do we want to handle a more complex weight estimate and return both in the future?
+        return max(float(f_l * t_l), float(f_c * t_c))
+
+    def sizing(self) -> dict:
+        """Calculates Cover thicknesses required. [FCOVER].
+
+        Sizing calculates the thickness required for the current "snapshot"
+        condition. This assumes you've provided all the required instance
+        variables for sizing, including load (V), area moment (Q), and area
+        moment of inertia (I).
+
+        The Upper and Lower portions are calculated separately,
+        but will always be the same. Upper and lower criteria include
+        pressure design, local panel flutter, and acoustic fatigue. The side
+        panels include checks against shear strength.
+
+        Returns:
+            dict: results dictionary for upper, lower, and side covers
+        """
+        # Upper
+        upper_t = {}
+        upper_t["pressure"] = self.thickness_pressure()
+        upper_t["panel_flutter"] = self.panel_flutter()
+        upper_t["acoustic"] = self.acoustic_fatigue()
+        upper_t["min_gauge"] = self.min_gauge
+        # Lower
+        lower_t = {}
+        lower_t["pressure"] = self.thickness_pressure()
+        lower_t["panel_flutter"] = self.panel_flutter()
+        lower_t["acoustic"] = self.acoustic_fatigue()
+        lower_t["min_gauge"] = self.min_gauge
+        # Side
+        side_t = {}
+        side_t["pressure"] = self.thickness_pressure()
+        side_t["shear"] = self.field_thickness_block_shear()
+        side_t["net_section"] = self.land_thickness_net_section()
+        side_t["post_buckled"] = self.field_thickness_postbuckled()
+        side_t["panel_flutter"] = self.panel_flutter()
+        side_t["acoustic"] = self.acoustic_fatigue()
+        side_t["min_gauge"] = self.min_gauge
+
+        results = {"upper": upper_t, "lower": lower_t, "side": side_t}
+
+        return results
 
 
 @dataclass
@@ -785,6 +897,21 @@ class MinorFrame(Component):
 
     t_r: float = 0.0
     """cap flange thickness."""
+
+    M: float | None = None
+    """Bending moment of the section."""
+
+    frame_spacing: float | None = None
+    """Frame spacing, if known."""
+
+    diameter: float | None = None
+    """The fuselage diameter at the cut."""
+
+    min_gauge: float | None = 0.020
+    """The minimum gauge thickness (default 0.020)."""
+
+    context: ShellContext | None = None
+    """Sizing context."""
 
     @property
     def t_w(self) -> float:
@@ -822,31 +949,26 @@ class MinorFrame(Component):
             ** 0.5
         )
 
-    def general_stability(self, L: float, D: float, M: float) -> float:
+    def general_stability(self) -> float:
         """Thickness to avoid general instability.
 
         The thickness that provides frame stiffness sufficient to prevent
         general instability failure is solved via the Shanley equation.
 
-        Args:
-            L: Frame Spacing
-            D: Fuselage Diameter
-            M: Bending moment at the cut
-
         Returns:
             A float of Flange thickness.
         """
         c_f = 1 / 16000
-        numerator = c_f * M * D**2
+        numerator = c_f * self.M * self.diameter**2
         denominator = (
             self.material.E_c
-            * L
+            * self.frame_spacing
             * (self.b * self.c**2 + 2 * self.b**3 * self.c / 3 + self.c**3 / 24)
         )
 
         return float(numerator / denominator)
 
-    def acoustic_fatigue(self, d: float) -> float:
+    def acoustic_fatigue(self) -> float:
         """Thickness requirements based on acoustic fatigue.
 
         Assumptions are:
@@ -866,9 +988,6 @@ class MinorFrame(Component):
         decibel level is then increased by 30, which represents jet noise instead
         of a purely random spectrum.
 
-        Args:
-            d: Support spacing (frame spacing)
-
         Returns:
             A float of Flange thickness.
         """
@@ -878,39 +997,34 @@ class MinorFrame(Component):
         db_oa = db_r + 30
         P = 2.9e-9 * 10 ** (db_oa / 20)
         # Note: K_c is directly hardcoded to 7.025, per Fig. 20 of ADA002867
-        t_r = 7.025 * d**0.5 * P**2 / self.material.F_en
+        t_r = 7.025 * self.frame_spacing**0.5 * P**2 / self.material.F_en
 
         return float(t_r)
 
-    def post_buckled(
-        self,
-        d: float,
-        h: float,
-        frame_material: Material,
-        long_material: Material,
-        D: float,
-        M: float,
-        Z: float,
-        sum_z_sq: float,
-        t_c: float,
-        RC: float,
-        f_s: float,
-        f_scr: float,
-    ) -> float:
+    def post_buckled(self) -> float:
         """Thickness required for post-buckled strength."""
+        if not self.context:
+            return 0.0
+
+        ctx = self.context
+        if not ctx.t_c or ctx.f_s is None or ctx.f_scr is None:
+            return 0.0
+
         # Pass everything directly through to the ForcedCrippling class.
         construction = self.construction
         t_r = self.t_r
         b = self.b
         c = self.c
-        cover_material = self.material
+        cover_material = ctx.cover_material or self.material
+        long_material = ctx.long_material or self.material
+
         check = ForcedCrippling(
-            d=d,
-            h=h,
+            d=ctx.frame_spacing,
+            h=ctx.long_spacing,
             c=c,
             b=b,
             construction=construction,
-            frame_material=frame_material,
+            frame_material=self.material,
             cover_material=cover_material,
             long_material=long_material,
             t_r=t_r,
@@ -919,12 +1033,33 @@ class MinorFrame(Component):
         # directly, we only need the first value in the returned tuple.
         # No further analysis is necessary.
         t, _, _ = check.forced_crippling(
-            D=D, M=M, Z=Z, sum_z_sq=sum_z_sq, t_c=t_c, RC=RC, f_s=f_s, f_scr=f_scr
+            D=self.diameter or 0.0,
+            M=self.M or 0.0,
+            Z=ctx.Z or 0.0,
+            sum_z_sq=ctx.sum_z_sq or 1.0,
+            t_c=ctx.t_c,
+            RC=ctx.RC or 0.0,
+            f_s=ctx.f_s,
+            f_scr=ctx.f_scr,
         )
 
         return float(t)
 
+    def sizing(self) -> dict:
+        """Calculates the MinorFrame sizing. [MINFR]."""
+        results = {
+            "general_stability": self.general_stability(),
+            "acoustic_fatigue": self.acoustic_fatigue(),
+            "forced_crippling": self.post_buckled(),
+            "min_gauge": self.min_gauge,
+        }
 
+        return results
+
+
+# TODO: We need to revisit the Longerons. Compressive portion is completely
+# blank, and the area property and sizing methods just don't smell right.
+# For now, we're just going for something functional.
 @dataclass
 class Longeron(Component):
     """Fuselage longitudinal member component.
@@ -947,6 +1082,12 @@ class Longeron(Component):
 
     k: float
     """Inner flange proportion of web height."""
+
+    M: float | None = None
+    """Bending moment at the cut."""
+
+    context: ShellContext | None = None
+    """Sizing context."""
 
     @property
     def area(self) -> float:
@@ -984,7 +1125,6 @@ class Longeron(Component):
 
     def bending_strength(
         self,
-        M_ext: float,
         t: float,
         d: float,
         I_t: float,
@@ -993,7 +1133,7 @@ class Longeron(Component):
         A_s: float,
         I_a: float,
     ) -> float:
-        """Thickness required to satisfy bending strength.
+        """Area required to satisfy bending strength.
 
         Longitudinal member sizing is dependent on the contribution of all
         copmonents that resist bending loads. This method accounts for the difference
@@ -1010,17 +1150,16 @@ class Longeron(Component):
         fiber stress according to the relationship of vertical coordinate versus
         extreme fiber coordinate.
 
-        Bending moment is assumed to be reactied by an internal coupled force system.
+        Bending moment is assumed to be reacted by an internal coupled force system.
         Thus, in the case of down-bending, the uper half of the shell sustains tension
         loads, and the lower half, compression loads; half of the moment is reacted
         in each half. Covers are totally effective in the tension sector of the
         fuselage. Cutouts eliminate cover contributions; proximity to cutouts degrade
         the effectiveness of the cover. The width of cutouts at other synthesis cuts
-        combined with longitudinal displacement and hsear lag slope of 2 to 1 is used
+        combined with longitudinal displacement and shear lag slope of 2 to 1 is used
         to determine the apparent effective width.
 
         Args:
-            M_ext: External moment at the cut
             t: cover thickness
             d: fuselage depth
             I_t: cover moment of inertia, as a function of thickness
@@ -1049,11 +1188,12 @@ class Longeron(Component):
         M_sl = 0.0
 
         # Moment reacted by longerons
-        M_l = 0.5 * M_ext - M_c - M_s - M_sl
+        M_l = 0.5 * self.M - M_c - M_s - M_sl
 
         # Longeron area to resist this moment
         A_l = M_l * 0.5 * d / (f_max_l * self.i_xx / self.area)
 
+        # TODO:
         # Now the compression sector is evaluated
         # Effectiveness of cover in compression is based on Peery curved panel buckling
         # F_CCR = ( 9*(t_c/R)**(5/3) + 0.16*(t_c/L)**(1.3) + K_c*np.pi**2/(12*(1-nu_c**2)) ) * cover_e
@@ -1114,6 +1254,34 @@ class Longeron(Component):
         #     self.area = A_s2
 
         return 1.0
+
+    def sizing(self) -> float:
+        """Calculates the weight/in of the member."""
+        ctx = self.context
+        # Centroidal cover inertia is 1/12 b*h^3
+        # Effective width is twice the longeron flange width.
+        cover_A = 2 * self.b * ctx.t_c
+        cover_I = 2 * self.b * ctx.t_c**3 / 12
+        # Parallel axis theorem to get inertia of cover about centroid of longeron
+        cover_I = cover_I + cover_A * (self.b / 2) ** 2
+
+        area_1 = self.bending_strength(
+            t=ctx.t_c,
+            d=ctx.geom.depth,
+            I_t=cover_I,
+            l_p=ctx.geom.upper_panel,
+            # TODO: No cutouts currently supported!
+            rtu=0.0,
+            A_s=self.area_effective,
+            I_a=self.area_effective,
+        )
+        # area_2 = self.post_buckled(stuffffffffff)
+        area_2 = 0.0
+
+        w_1 = self.material.rho * area_1
+        w_2 = self.material.rho * area_2
+
+        return max(w_1, w_2)
 
 
 # TODO: Bulkheads need major overhaul! This is where the internal geometry
@@ -1426,7 +1594,9 @@ class MajorFrame(Component):
     min_gauge: float = field(default=0.040, metadata={"unit": "inch"})
     """Manufacturing requirement for minimum gauge thickness, default 0.040[in]."""
 
-    def show(self, show_coords: bool = False, save: bool = False) -> Tuple[Any, Any]:
+    def show(
+        self, show_coords: bool = False, save: bool = False, display: bool = False
+    ) -> Tuple[Any, Any]:
         """Plot the frame and applied loads."""
         if show_coords:
             # coords = [(row[5], row[6]) for row in self.cuts]
@@ -1468,7 +1638,7 @@ class MajorFrame(Component):
                         "color": "red",
                     },
                 )
-                _ = ax.annotate(abs(vertical), xy=v_tip)
+                _ = ax.annotate(f"{abs(vertical):.2f}", xy=v_tip)
             if horizontal != 0.0:
                 _ = ax.annotate(
                     "",
@@ -1481,7 +1651,7 @@ class MajorFrame(Component):
                     },
                 )
                 anchor = "left" if horizontal > 0 else "right"
-                _ = ax.annotate(abs(horizontal), xy=h_tip, ha=anchor)
+                _ = ax.annotate(f"{abs(horizontal):.2f}", xy=h_tip, ha=anchor)
             if moment != 0.0:
                 z_a = z - self.geom.depth / 10
                 z_b = z + self.geom.depth / 10
@@ -1510,7 +1680,7 @@ class MajorFrame(Component):
                 )
                 moment_text = (y_moment, z)
                 anchor = "left" if moment > 0 else "right"
-                _ = ax.annotate(abs(moment), xy=moment_text, ha=anchor)
+                _ = ax.annotate(f"{abs(moment):.2f}", xy=moment_text, ha=anchor)
 
         _ = ax.set_xlabel("Butt Line, $BL$", fontfamily="serif")
         _ = ax.set_ylabel("Water Line, $WL$", fontfamily="serif")
@@ -1537,7 +1707,8 @@ class MajorFrame(Component):
         if save:
             fig.savefig(f"FS{self.fs_loc}_geom_loads.png")
 
-        plt.show()
+        if display:
+            plt.show()
 
         return fig, ax
 
@@ -2089,6 +2260,51 @@ class Fuselage:
     major_frames: Tuple[MajorFrame]
     """A set of MajorFrames with load introduction points."""
 
+    construction: str
+    """Construction method. ('stringer' or 'longeron')"""
+
+    cover_model: Cover
+    """The Cover model to use."""
+
+    long_model: Longeron
+    """The Longeron/Stinger model to use."""
+
+    frame_model: MinorFrame
+    """The MinorFrame model to use."""
+
+    loadcase: LoadCase | None = None
+    """A single loadcase to evaluate."""
+
+    def longeron_coords(
+        self, station: Station, phi: float | None = None, d: float = 1.0
+    ) -> Tuple[float]:
+        """Vertical and horizontal coordinates of the longerons in a section.
+
+        Four primary longerons are assumed for longeron construction fuselages.
+        These elements may be located by either the angular definition (phi),
+        or as a fraction of the total fuselage section depth.
+
+        If the user provides a phi and d value, the d value will be ignored.
+
+        Args:
+            station (Station): The station geometry.
+            phi (float | None, optional): Clockwise angle. Defaults to None.
+            d (float): Fraction of total depth. Defaults to 1.0.
+
+        Returns:
+            Tuple[float]: Coordinates (y, z) of longeron centroid
+        """
+        if phi:
+            # if phi provided go ahead and use that. Easy.
+            return station.get_coords(phi)
+        else:
+            if d >= 1:
+                y = station.wo
+            else:
+                zz = d * station.depth / 2 - station.doo
+                y = station.wo + np.sqrt(station.radius**2 - zz**2)
+            return (y, d * station.depth / 2)
+
     def cut_geometry(self, start: Station, end: Station) -> Station:
         """Interpolate the geometry between the described stations.
 
@@ -2103,19 +2319,114 @@ class Fuselage:
             None
         """
         _ = end
-        return start
+        interpolated = Station(
+            orientation=start.orientation,
+            name=start.name,
+            number=np.mean([start.number, end.number]),
+            width=np.mean([start.width, end.width]),
+            depth=np.mean([start.depth, end.depth]),
+            vertical_centroid=np.mean([start.vertical_centroid, end.vertical_centroid]),
+            radius=np.mean([start.radius, end.radius]),
+        )
+        return interpolated
 
-    def synthesis(self) -> None:
-        """The full multistations synthesis loop.
+    def get_q(self, geom: Station, ds: float | None = None, **kwargs) -> float:
+        """Calculate the first moment of area for the section.
 
-        Mocking this up for now, to outline the roadmap for all methods.
+        The first moment of area calculation assumes all areas are lumped
+        into the bending element centroids. To calculate, simply sum all
+        the areas by their vertical distance. We calculate this value for
+        the midpoint of the fuselage, where the maximum value will be.
+
+        Note: This is intended to be calculated exclusive of sizing. An
+        inherent assumption is that exact internal loads distributions are
+        not required. That would be out of scope.
+        """
+        if self.construction == "longeron":
+            y, z = self.longeron_coords(geom, **kwargs)
+            return z * self.long_model.area
+        elif self.construction == "stringer":
+            # Area moments are simply the summation of vertical and lateral coordinates.
+            # We only use the vertical because we only calculate effects from vertical bending.
+            # Therefore, Q = ALU * sum(z-coords) + ALS * sum(z-coords)
+            #              + TCU * sum(z-coords * ds) + TCS * sum(z-coords * ds)
+            # ALU = Area of each upper stringer
+            # ALS = Area of each side stringer
+            # TCU = thickness of upper cover
+            # TCS = thickness of side cover
+
+            # ASSUMPTION: All stringers are the same area.
+            perimeter = geom.upper_panel + geom.lower_panel + 2 * geom.side_panel
+            # Quarter the total stringers are in the upper quadrant
+            num_stringers = perimeter / ds / 4
+
+            # TODO: This isn't quite right... Close enough for weights sizing?
+            d_theta = 90 / num_stringers
+
+            # This could be a numpy array instead of a loop.
+            z_coords = []
+            theta = d_theta / 2
+            for _ in range(num_stringers):
+                y, z = geom.get_coords(theta)
+                z_coords.append(z)
+                theta += d_theta
+
+            Q_alu = self.long_model.area * np.sum(z_coords)
+            Q_als = self.long_model.area * np.sum(z_coords)
+            Q_tcu = self.cover_model.t_c * np.sum(z_coords * ds)
+            Q_tcs = self.cover_model.t_c * np.sum(z_coords * ds)
+
+            return Q_alu + Q_als + Q_tcu + Q_tcs
+        else:
+            raise ValueError("Construction method must be 'stringer' or 'longeron'!")
+
+    def get_inertia(self, geom: Station, **kwargs) -> float:
+        """Calculate the second moment of area for the section.
+
+        The second moment of area is calculated similarly to the first moment
+        of area. Sum all contributions from bending elements and covers, using
+        their centroids and a lumped area assumption.
+
+        Note: This is intended to be calculated exclusive of sizing. An
+        inherent assumption is that exact internal loads distributions are
+        not required. That would be out of scope.
+
+        Args:
+            geom (Station): The station geometry.
+            kwargs (dict): Keyword arguments.
+
+        Returns:
+            float: The second moment of area for the upper quadrant.
+
+        Raises:
+            NotImplementedError: For Stringer construction I.
+            ValueError: If parent does not have `construction` attribute defined correctly.
+        """
+        if self.construction == "longeron":
+            y, z = self.longeron_coords(geom, **kwargs)
+            return z**2 * self.long_model.area
+        elif self.construction == "stringer":
+            # TODO: I guess do this eventually...
+            raise NotImplementedError(
+                "Tell the author he's an idiot and forgot to do this."
+            )
+        else:
+            raise ValueError("Construction method must be 'stringer' or 'longeron'!")
+
+    def synthesis(
+        self,
+        loadcase: LoadCase,
+        stringer_spacing: float | None = None,
+        frame_spacing: float | None = None,
+    ) -> list:
+        """The full multistation synthesis loop. [FUSSHL].
 
         Geometry definitions and constraints, loads, and design criteria are all
         parameters evaluated in the synthesis of shell members. Covers, Minor
         Frames, and Longitudinal Members (Stringers/Longerons) form the basic
         structural grid work that resists vehicle shear and bending loads. Covers
         are thin sheets which are efficient in resisting shear and tension loads,
-        but inefficient in resitting compresison loads. Stiffening members, Minor
+        but inefficient in resisting compresison loads. Stiffening members, Minor
         Frames, and Stringers/Longerons are used to provide the cpability for
         resisting compression loads.
 
@@ -2126,7 +2437,7 @@ class Fuselage:
         Pressure bulkhead design criteria and sizing are also evaluated
         independently for local considerations.
 
-        Several assumptions have bene made to minimize the multiplicity of
+        Several assumptions have been made to minimize the multiplicity of
         variables and thus simplify the synthesis process.
             1. The shell is assumed to be composed of only four (4) sectors:
             upper, lower, and two symmetric sides.
@@ -2135,22 +2446,88 @@ class Fuselage:
             3. The side sector is designed to resist only vertical shear load,
             and stringers in this sector are sized to satisfy minimum area and
             cover support requirements.
+
+        Args:
+            loadcase (LoadCase): The loadcase to evaluate.
+            stringer_spacing (Float|None) : Provide stringer spacing or search for min frame spacing by leaving blank. Default None.
+            frame_spacing (Float|None) : Provide frame spacing or search for min frame spacing by leaving blank. Default None.
+
+        Returns:
+            list of tuples (cut_location: float, cut_results: NamedTuple)
         """
-        for k, v in enumerate(self.stations):
-            if k == len(self.stations):
+        # Doing the MajorFrame weight first.
+        for frame in self.major_frames:
+            frame.synthesis()
+
+        results = []
+        for k, station in enumerate(self.stations):
+            if k == len(self.stations) - 1:
                 # the last station in the tuple is the tail geometry,
                 # so no synthesis cut aft of the tail section.
                 continue
             else:
                 # interpolate the geometry between the current station and the next
-                geom = self.cut_geometry(v, self.stations[k + 1])
+                geom = self.cut_geometry(station, self.stations[k + 1])
+                chunk_length = self.stations[k + 1].number - station.number
 
-        # This is nonsense stuff to pass pre-commit.
-        _ = geom
-        #
+            _, cut_shear, cut_bending = self.lookup_loads(
+                geom.number, loadcase.fuse_loads
+            )
+
+            # Should we use a provided spacing or conduct a search?
+            if not stringer_spacing:
+                # A full-up nested search
+                if self.construction == "longeron":
+                    # Note, this is a fraction of the section depth, not a unit
+                    # Since we only assume 4 primary longerons, this is kinda useless.
+                    stringer_min_spacing = 0.75
+                    # Hardcoding a lower value for the search routine
+                    frame_spacing = 2.0
+                else:
+                    # Start with a lot of stringers in the upper panel
+                    stringer_min_spacing = geom.upper_panel / 48
+
+                cut_results = self.stringer_search(
+                    start=stringer_min_spacing,
+                    geom=geom,
+                    frame_spacing=frame_spacing,
+                    V=cut_shear,
+                    M=cut_bending,
+                    chunk_length=chunk_length,
+                    loadcase=loadcase,
+                    d=0.9,
+                )
+            elif not frame_spacing:
+                # Search on frame spacing only
+                cut_results = self.frame_search(
+                    V=cut_shear,
+                    M=cut_bending,
+                    geom=geom,
+                    chunk_length=chunk_length,
+                    loadcase=loadcase,
+                )
+            else:
+                # Don't need a search
+                cut_results = self.size_shell(
+                    V=cut_shear,
+                    M=cut_bending,
+                    geom=geom,
+                    frame_spacing=frame_spacing,
+                    chunk_length=chunk_length,
+                    loadcase=loadcase,
+                )
+
+            results.append((geom.number, cut_results))
+
+        return results
 
     def net_loads(
-        self, w_fus: ArrayLike, w_fc: ArrayLike, p_air: ArrayLike, p_ext: ArrayLike
+        self,
+        w_fus: ArrayLike,
+        w_fc: ArrayLike,
+        p_air: ArrayLike,
+        p_ext: ArrayLike,
+        debug: bool = False,
     ) -> ArrayLike:
         """Calculates net (ultimate) vertical shear and bending. [FLDNT].
 
@@ -2170,6 +2547,7 @@ class Fuselage:
             w_fc (ArrayLike): Distributed fuselage content weights (nonstructural)
             p_air (ArrayLike): Distributed body airloads
             p_ext (ArrayLike): External forces at the support frames
+            debug (bool): Print debugging information
 
         Returns:
             ArrayLike: Loads matrix with cols [FS, Force, Moment, Shear, Bending]
@@ -2189,7 +2567,23 @@ class Fuselage:
         # March along the fuselage, and pull together the applied loads into 1 source
         # For each load station, append the applied forces and moments into a matrix
         loads = np.vstack((w_fus, w_fc, p_air, p_ext))
-        loads.sort(axis=0)
+        # Sorting the array by the FS (the 0th column)
+        row_idx = np.argsort(loads[:, 0])
+        loads = loads[row_idx]
+        # Generating an array with unique FS values
+        unique_x, inverse_indices = np.unique(loads[:, 0], return_inverse=True)
+        sum_p = np.bincount(inverse_indices, weights=loads[:, 1])
+        sum_m = np.bincount(inverse_indices, weights=loads[:, 2])
+        loads = np.column_stack((unique_x, sum_p, sum_m))
+        # We've combined all the external loads now.
+        # Time to remove the zero row for net loads computation.
+        loads = loads[1:]
+
+        if debug:
+            print("\nNET LOADS FUNCTION DEBUG")
+            print("Loads Array:")
+            print(" [        FS,         Load,         Moment  ]")
+            print(loads)
 
         # March through the applied loads matrix,
         # add cumulative shear, and calculate cumulative moment
@@ -2197,28 +2591,34 @@ class Fuselage:
         loads = np.column_stack((loads, shears))
         moments = []
         x = 0
-        for row in loads:
-            load = row[1]
-            moment = row[2]
+        for i, row in enumerate(loads):
+            if i == 0:
+                # First entry won't have previous moment, so it's zero
+                moments.append(0)
+            else:
+                # Cumulative internal moment is equal to the previous moment,
+                # plus any point moment, plus the internal cumulative shear
+                # multiplied by the incremental distance.
+                prev_m = moments[i - 1]
+                point_moment = row[2]
+                load = loads[i - 1][3]
+                moments.append(prev_m + point_moment + load * (row[0] - x))
 
-            moments.append(moment + load * (row[0] - x))
             x = row[0]
 
         moments = np.array(moments)
 
         # Start it at zero with no loads at origin (free tip)
         loads = np.column_stack((loads, moments))
-        loads = np.insert(loads, obj=0, values=np.zeros(5, dtype=float), axis=0)
-
         # Verify static equilibrium
         if shears[-1] != 0:
             raise ArithmeticError(
-                f"Static Equilibrium has been violated! {np.sum(shears):.2f} != 0.0"
+                f"Shear Static Equilibrium has been violated! {shears[-1]:.3f} != 0.0"
             )
 
-        if moments[-1] != 0:
+        if not np.isclose(moments[-1], 0.0, atol=0.001):
             raise ArithmeticError(
-                f"Static Equilibrium has been violated! {np.sum(moments):.2f} != 0.0"
+                f"Moment Static Equilibrium has been violated! {moments[-1]:.3f} != 0.0"
             )
 
         # Return the final arrays of internal shears and moments
@@ -2253,7 +2653,7 @@ class Fuselage:
 
         fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True, figsize=(11, 5))
         _ = ax1.plot(loads[:, 0], loads[:, 3])
-        _ = ax2.plot(loads[:, 0], loads[:, 4])
+        _ = ax2.plot(loads[:, 0], loads[:, 4], color="darkorange")
 
         # _ = ax1.set_xlabel("Fuselage Station, $FS$, [in]")
         _ = ax1.set_ylabel("Vertical Shear, $V$, [lbs]", fontfamily="serif")
@@ -2307,3 +2707,266 @@ class Fuselage:
             v = np.interp(x, xp=xp, fp=fp_v)
             m = np.interp(x, xp=xp, fp=fp_m)
             return (x, np.float64(v), np.float64(m))
+
+    def stringer_search(
+        self,
+        start: float,
+        geom: Station,
+        frame_spacing: float,
+        V: float,
+        M: float,
+        chunk_length: float,
+        loadcase: LoadCase,
+        **kwargs,
+    ) -> NamedTuple:
+        """Search for weight-optimum stringer/longeron spacing. [LONGS].
+
+        For longeron construction, the routine locates the primary longerons.
+        The longeron position data are either defined at the local cuts
+        or by a general position data.
+
+        Args:
+            start (float) : The starting spacing.
+            geom (Station): The station geometry.
+            frame_spacing (float): Frame spacing, inches.
+            V (float): Beam shear load at the cut.
+            M (float): Beam bending moment at the cut.
+            chunk_length (float): Chunk length from the synthesis routine.
+            loadcase (LoadCase): The loadcase from synthesis.
+            kwargs (dict): Keyword arguments.
+
+        Returns:
+            NamedTuple: weight results
+        """
+        max_spacing = max(geom.depth, geom.width) / 2
+        previous_results = None
+        for spacing in np.linspace(start, max_spacing, num=10):
+            # Do some stuff on the spacing.
+            results_obj = self.frame_search(
+                min_spacing=frame_spacing,
+                V=V,
+                M=M,
+                long_spacing=spacing,
+                geom=geom,
+                chunk_length=chunk_length,
+                loadcase=loadcase,
+            )
+
+            # Update constituent models that depend on spacing.
+            self.cover_model.Q = self.get_q(geom=geom, **kwargs)
+            self.cover_model.I = self.get_inertia(geom=geom, **kwargs)
+
+            # Evaluate the performance criteria
+            if spacing > start:
+                # The first iteration won't have previous results
+                if results_obj.weight > previous_results.weight:
+                    break
+
+            previous_results = results_obj
+
+        return previous_results
+
+    def frame_search(
+        self,
+        min_spacing: float,
+        V: float,
+        M: float,
+        long_spacing: float,
+        geom: Station,
+        chunk_length: float,
+        loadcase: LoadCase,
+    ) -> NamedTuple:
+        """Search for weight-optimum frame spacing. [FPANEL].
+
+        Frame spacing starts with a pre-determined maximum, based on the
+        shell dimensions, and an initial minimum. Spacing is increased until
+        the lumped weight of covers, minor frames, and longitudinal members
+        indicates an upward trend. This increase of weight, or an optimum less
+        than the initial spacing abbreviates the search.
+
+        Args:
+            min_spacing (float): Frame spacing, inches.
+            V (float): Beam shear load at the cut.
+            M (float): Beam bending moment at the cut.
+            long_spacing (float): Longeron spacing.
+            geom (Station): The station geometry.
+            chunk_length (float): Chunk length from the synthesis routine.
+            loadcase (LoadCase): The loadcase from synthesis.
+
+        Returns:
+            NamedTuple: weight results
+        """
+        # Is 10x min an appropriate ceiling? So 2 to 20 or 6 to 60? Probably overkill if anything.
+        max_spacing = 10 * min_spacing
+
+        previous_results = None
+        for spacing in np.linspace(min_spacing, max_spacing, num=20):
+            results_obj = self.size_shell(
+                V=V,
+                M=M,
+                long_spacing=long_spacing,
+                frame_spacing=spacing,
+                geom=geom,
+                chunk_length=chunk_length,
+                loadcase=loadcase,
+            )
+            if spacing > min_spacing:
+                # The first iteration won't have previous results
+                if results_obj.weight > previous_results.weight:
+                    break
+
+            previous_results = results_obj
+
+        return previous_results
+
+    def size_shell(
+        self,
+        V: float,
+        M: float,
+        long_spacing: float,
+        frame_spacing: float,
+        geom: Station,
+        chunk_length: float,
+        loadcase: LoadCase,
+    ) -> NamedTuple:
+        """Conducts analysis point sizing of Fuselage shell structure.
+
+        This method sizes shell structure at a single point.
+
+        Args:
+            V (float): Beam shear load at the cut.
+            M (float): Beam bending moment at the cut.
+            long_spacing (float): Longeron/Stringer spacing.
+            frame_spacing (float): MinorFrame spacing.
+            geom (Station): Station geometry.
+            chunk_length (float): The chunk length from the synthesis routine.
+            loadcase (LoadCase): The loadcase from synthesis.
+
+        Returns:
+            NamedTuple: The results object with weight breakdown.
+
+        Raises:
+            NotImplementedError: For stringer construction.
+            TypeError: If the Cover methods return multiple thickness values.
+        """
+        # Set the instance variables for our cut loads
+        self.cover_model.V = V
+        self.cover_model.L = frame_spacing
+        self.cover_model.D = long_spacing
+        self.cover_model.mach = loadcase.mach
+        self.cover_model.altitude = loadcase.altitude
+        self.cover_model.R = abs(geom.number - loadcase.cg_x)
+
+        self.frame_model.M = M
+        self.frame_model.frame_spacing = frame_spacing
+        self.frame_model.diameter = np.mean([geom.depth, geom.width])
+
+        self.long_model.M = M
+
+        context = ShellContext(
+            geom=geom,
+            V=V,
+            M=M,
+            long_spacing=long_spacing,
+            frame_spacing=frame_spacing,
+            cover_material=self.cover_model.material,
+            long_material=self.long_model.material,
+        )
+        self.cover_model.context = context
+        self.frame_model.context = context
+        self.long_model.context = context
+
+        # Run the class sizing routines
+        cover_results = self.cover_model.sizing()
+
+        logger.debug(f"Sizing station {geom.orientation}{geom.number} results:")
+        logger.debug(50 * "-")
+        logger.debug("Covers:")
+        logger.debug(cover_results)
+
+        # Populate context with cover results for subsequent sizing routines
+        try:
+            # If we ever swap some cover methods to return both
+            # field and land thickness, we'll get a type error here.
+            t_c = max(cover_results["side"].values())
+        except TypeError as err:
+            # If we do that, let's catch it and help future-us understand what went wrong.
+            print(cover_results)
+            print(cover_results["side"].values())
+            raise err
+
+        context.t_c = t_c
+        context.RC = self.cover_model.RC
+
+        q = self.cover_model.q
+        context.f_s = q / t_c if t_c > 0 else 0.0
+
+        # Calculate critical shear buckling strength
+        f_scr = (
+            self.cover_model.k_s
+            * np.pi**2
+            * self.cover_model.material.E
+            / (12 * (1 - self.cover_model.material.nu**2))
+            * (t_c / min(long_spacing, frame_spacing)) ** 2
+        )
+        context.f_scr = f_scr
+
+        context.Z = geom.depth / 2
+
+        if self.construction == "longeron":
+            _, z = self.longeron_coords(geom)
+            context.sum_z_sq = 4 * z**2
+        else:
+            context.sum_z_sq = 1.0  # placeholder for stringer
+            raise NotImplementedError(
+                "The sum_z_sq context for stringers isn't currently calculated! Further development needed."
+            )
+
+        frame_results = self.frame_model.sizing()
+        logger.debug(
+            f"Setting MinorFrame flange thickness to {max(frame_results.values()):.3f}"
+        )
+        self.frame_model.t_r = max(frame_results.values())
+        long_weight = self.long_model.sizing()
+
+        # Caculate the weight and build the results object
+        # All weights are total lbs for this chunk
+        cover_rho = self.cover_model.material.rho
+        upper_s = geom.upper_panel
+        lower_s = geom.lower_panel
+        side_s = geom.side_panel
+        cover_upper_weight = (
+            upper_s * cover_rho * max(cover_results["upper"].values()) * chunk_length
+        )
+        cover_lower_weight = (
+            lower_s * cover_rho * max(cover_results["lower"].values()) * chunk_length
+        )
+        cover_side_weight = (
+            side_s * cover_rho * max(cover_results["side"].values()) * chunk_length
+        )
+
+        perimeter = geom.upper_panel + geom.lower_panel + 2 * geom.side_panel
+        logger.debug(f"Frame Perimeter = {perimeter:.2f}")
+        # With thickness calculated from sizing, area is automatically updated for us.
+        single_weight = (
+            self.frame_model.material.rho * self.frame_model.area * perimeter
+        )
+        logger.debug(f"Single Frame Weight = {single_weight:.2f}")
+        frame_weight = single_weight * chunk_length / frame_spacing
+        logger.debug(f"Total Frame Weight = {frame_weight:.2f}")
+
+        long_weight = long_weight * perimeter / long_spacing * chunk_length
+
+        weights = {
+            "covers_upper": cover_upper_weight,
+            "covers_lower": cover_lower_weight,
+            "covers_side": cover_side_weight,
+            "minor_frames": frame_weight,
+            "longerons": long_weight,
+        }
+        total_weight = sum(weights.values())
+
+        ResultsObj = namedtuple("Results", ["weights_dict", "weight", "segment_length"])
+        results = ResultsObj(weights, total_weight, chunk_length)
+
+        return results

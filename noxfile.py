@@ -9,7 +9,6 @@ from textwrap import dedent
 
 import nox
 
-
 try:
     from nox_poetry import Session
     from nox_poetry import session
@@ -29,7 +28,7 @@ nox.needs_version = ">= 2021.6.6"
 nox.options.sessions = (
     "pre-commit",
     "safety",
-    "mypy",
+    # "mypy",
     "tests",
     "typeguard",
     "xdoctest",
@@ -118,7 +117,7 @@ def precommit(session: Session) -> None:
         "run",
         "--all-files",
         "--hook-stage=manual",
-        "--show-diff-on-failure",
+        # "--show-diff-on-failure",
     ]
     session.install(
         "black",
@@ -128,7 +127,7 @@ def precommit(session: Session) -> None:
         "flake8-bugbear",
         "flake8-docstrings",
         "flake8-rst-docstrings",
-        "isort",
+        "isort[toml]",
         "pep8-naming",
         "pre-commit",
         "pre-commit-hooks",

@@ -13,12 +13,13 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Circle
 from matplotlib.patches import Ellipse
 from matplotlib.patches import FancyBboxPatch
+from numpy.typing import ArrayLike
 from scipy.special import ellipeinc
-
 
 __version__ = version("hyperstruct")
 
 
+# TODO: We should have an inverse version of this for smearing weights
 def composite_cg(masses: List[Tuple[float, float]]) -> Tuple[float, float]:
     """Calculate the cg of a combined set of masses, along a single axis.
 
@@ -104,15 +105,6 @@ class Component:
 
     material: Material
     """material the cover is made of."""
-
-    def synthesis(self) -> None:
-        """The sizing method.
-
-        The sizing method collects all sizing routines and executes them
-        in the order of the `routines` list.
-        """
-        # This doesn't work. It's just a placeholder.
-        pass
 
 
 @dataclass
@@ -279,21 +271,34 @@ class Station:
             raise NotImplementedError
 
     def show(
-        self, coords: Optional[List[Tuple[float, float]]] = None, display: bool = True
-    ) -> Tuple[Figure, Axes]:
+        self,
+        coords: Optional[List[Tuple[float, float]]] = None,
+        display: bool = True,
+        axes: Axes = None,
+        xlim: None | Tuple[float, float] = None,
+        ylim: None | Tuple[float, float] = None,
+    ) -> None | Tuple[Figure, Axes]:
         """Plot the station shape for a visual check.
 
         This method just uses matplotlib to draw the shape on a plot.
         It will select the appropriate shape (Artist) object, based on
         the Station properties, and put in a figure on it's own.
         """
-        fig, ax = plt.subplots()
-        lower_y = 0.0 if self.vertical_centroid >= 0 else self.vertical_centroid
-        ax.set(
-            xlim=(-1.1 * self.width, 1.1 * self.width),
-            ylim=(lower_y, 1.1 * self.depth + self.vertical_centroid),
-            aspect="equal",
-        )
+        if not axes:
+            # If a specific axes object is passed, use that axes,
+            # otherwise, we need to instantiate the axes
+            fig, ax = plt.subplots()
+        else:
+            ax = axes
+
+        if not xlim:
+            xlim = (-1.1 * self.width, 1.1 * self.width)
+
+        if not ylim:
+            lower_y = 0.0 if self.vertical_centroid >= 0 else self.vertical_centroid
+            ylim = (lower_y, 1.1 * self.depth + self.vertical_centroid)
+
+        ax.set(xlim=xlim, ylim=ylim)
 
         if self.is_ellipse:
             obj = Ellipse(
@@ -370,10 +375,16 @@ class Station:
                     markersize=4,
                 )
 
+        _ = ax.set_title(
+            label=f"FS {self.number}, {self.name}", fontfamily="serif", fontsize="small"
+        )
         if display:
             plt.show()
 
-        return (fig, ax)
+        if axes:
+            return None
+        else:
+            return (fig, ax)
 
     def _quadratic_sol(
         self, m: float, q: float, p: float
@@ -623,3 +634,29 @@ class Station:
             y = r * np.cos(theta) + self.vertical_centroid
 
         return (float(x), float(y))
+
+
+@dataclass
+class LoadCase:
+    """Loads representing a single LoadCase along a beam.
+
+    A LoadCase is just a pre-formatted numpy array with column assumptions, and some metadata.
+    The columns of the LoadCase.fuse_loads array are:
+        Station [in],
+        Applied Beam Shear [lbf],
+        Applied Moment [in-lbf],
+        Internal Beam Shear [lbf],
+        Internal Moment [in-lbf]
+
+    Note that only a single directional load is supported and assumed. For all components except
+    the Vertical Stabilizer, this is vertical (z). For the Vertical Stabilizer, this horizontal (y).
+    """
+
+    fuse_loads: ArrayLike
+    lcid: int = None
+    name: str = None
+    mach: float | None = None
+    altitude: float | None = None
+    cg_x: float | None = None
+    cg_y: float | None = None
+    cg_z: float | None = None
