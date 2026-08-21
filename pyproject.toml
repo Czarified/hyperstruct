@@ -28,7 +28,7 @@ pandas = ">=2.3.0, <3.0"
 rich = "^15.0.0"
 
 [tool.poetry.requires-plugins]
-poetry-plugin-export = ">=1.8.0"
+poetry-plugin-export = ">=1.8"
 
 [tool.poetry.group.dev.dependencies]
 Pygments = ">=2.10.0"
@@ -41,7 +41,7 @@ flake8-bugbear = ">=21.9.2"
 flake8-docstrings = ">=1.6.0"
 flake8-rst-docstrings = ">=0.2.5"
 furo = ">=2021.11.12"
-isort = ">=5.10.1"
+isort = ">=8.0"
 mypy = ">=0.930"
 pep8-naming = ">=0.12.1"
 pre-commit = ">=2.16.0"

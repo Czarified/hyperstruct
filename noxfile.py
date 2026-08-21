@@ -118,7 +118,7 @@ def precommit(session: Session) -> None:
         "run",
         "--all-files",
         "--hook-stage=manual",
-        "--show-diff-on-failure",
+        # "--show-diff-on-failure",
     ]
     session.install(
         "black",
@@ -128,7 +128,7 @@ def precommit(session: Session) -> None:
         "flake8-bugbear",
         "flake8-docstrings",
         "flake8-rst-docstrings",
-        "isort",
+        "isort[toml]",
         "pep8-naming",
         "pre-commit",
         "pre-commit-hooks",
