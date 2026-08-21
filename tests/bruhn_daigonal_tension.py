@@ -9,7 +9,6 @@ Reference Bruhn "Analysis and Design of Flight Vehicle Structures", 1973
 from hyperstruct import Material
 from hyperstruct.fuselage import ForcedCrippling
 
-
 # Example C11.34
 # Everything here is 24st material
 al_24st = Material(

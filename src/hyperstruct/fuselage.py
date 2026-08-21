@@ -32,7 +32,6 @@ from hyperstruct import LoadCase
 from hyperstruct import Material
 from hyperstruct import Station
 
-
 FORMAT = "%(asctime)s %(message)s"
 logging.basicConfig(
     level="INFO",

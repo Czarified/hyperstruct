@@ -16,7 +16,6 @@ from matplotlib.patches import FancyBboxPatch
 from numpy.typing import ArrayLike
 from scipy.special import ellipeinc
 
-
 __version__ = version("hyperstruct")
 
 

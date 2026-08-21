@@ -32,7 +32,6 @@ from hyperstruct.fuselage import Longeron
 from hyperstruct.fuselage import MajorFrame
 from hyperstruct.fuselage import MinorFrame
 
-
 # from hyperstruct.fuselage import MinorFrame
 
 
