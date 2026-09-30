@@ -47,8 +47,7 @@ Working Notes as I'm reading the reference material:
 # import logging
 # from collections import namedtuple
 # from copy import copy
-# from dataclasses import dataclass
-# from dataclasses import field
+from dataclasses import dataclass
 
 # from typing import Dict
 # from typing import Any
@@ -56,7 +55,14 @@ Working Notes as I'm reading the reference material:
 from typing import Tuple
 
 # import matplotlib.pyplot as plt
-# import numpy as np
+import numpy as np
+
+# from hyperstruct import Component
+
+# from dataclasses import field
+
+
+
 # import pandas as pd
 # from matplotlib.axes import Axes
 # from matplotlib.figure import Figure
@@ -66,9 +72,26 @@ from typing import Tuple
 # from rich.logging import RichHandler
 # from scipy.optimize import minimize_scalar
 
-# from hyperstruct import Component
+
 # from hyperstruct import LoadCase
 # from hyperstruct import Material
+
+
+#
+# Classes
+#
+
+
+@dataclass
+class GroundLoads:
+    """Ground Loads base class."""
+
+    name: str
+    lcid: float
+    vert: float
+    drag: float
+    side: float
+
 
 #
 # Module Functions
@@ -104,3 +127,91 @@ def landing_speed(
     vl_l = 34.776 * (grwt_l / (s_w * clift_l)) ** 0.5
 
     return (vl_to, vl_l)
+
+
+def load_factors(
+    fea: float,
+    ss_to: float,
+    ss_l: float,
+    clift_w: float,
+    stroke_to: float,
+    stroke_l: float,
+    od_m: float,
+    g: float = 32.172,
+) -> Tuple[float, float]:
+    """Calculate the Load Factors.
+
+    Load Factors are calculated from the strokes, sink speeds, wing lift
+    coeffciient, and the tire diameter.
+
+    Args:
+        fea (float): fraction of energy absorbed by strut.
+        ss_to (float): sink speed at takeoff weight.
+        ss_l (float): sink speed at landing weight.
+        clift_w (float): wing lift coefficient.
+        stroke_to (float): effective stroke of MLG at takeoff weight.
+        stroke_l (float): effective stroke of MLG at landing weight.
+        od_m (float): outer diameter of MLG tires.
+        g (float, optional): gravitational constant. Defaults to 32.172.
+
+    Returns:
+        Tuple[float, float]: Load Factors at takeoff weight and landing weight.
+    """
+    ng_to = (
+        (1 - fea)
+        * (ss_to**2 / (2 * g) + (1 - clift_w) * (0.98 * stroke_to + 0.08 * od_m / 12))
+        / (0.8 * stroke_to)
+    ) + clift_w
+
+    ng_l = (
+        (1 - fea)
+        * (ss_l**2 / (2 * g) + (1 - clift_w) * (0.98 * stroke_l + 0.08 * od_m / 12))
+        / (0.8 * stroke_l)
+    ) + clift_w
+
+    return (ng_to, ng_l)
+
+
+def piston_diameters(
+    grwt_to: float, cg_to: float, fs_n: float, fs_m: float, strut_m: int
+) -> Tuple[float, float]:
+    """MLG and NLG Piston Diameters.
+
+    The Main Gear piston diameter is a function of static load.
+    The Nose Gear piston diameter is simply a ratio of the main.
+    A different function is used for static loads over 77,295 lbs.
+
+    Args:
+        grwt_to (float): gross weight at takeoff.
+        cg_to (float): center of gravity at takeoff.
+        fs_n (float): fuselage station of nose gear.
+        fs_m (float): fuselage station of main gear.
+        strut_m (int): number of main gear struts.
+
+    Returns:
+        Tuple[float, float]: Main and Nose gear piston diameters.
+    """
+    sw = grwt_to * np.abs((cg_to - fs_n) / (fs_m - fs_n)) / strut_m
+
+    if sw > 77295:
+        dp_m = ((4 * sw) / (15000 * np.pi)) ** 0.5
+    else:
+        if sw < 5542:
+            acm = 187.5
+            bcm = 380.0
+        elif sw < 33819:
+            acm = 126.7
+            bcm = 545.0
+        elif sw <= 77295:
+            acm = 95.6
+            bcm = 720.0
+
+        aa = -0.333 * (bcm / acm) ** 2
+        bb = 2 / 27 * (bcm / acm) ** 3 - (4 * sw) / (np.pi * acm)
+        radpd = (bb**2 / 4 + aa**3 / 27) ** 0.5
+
+        dp_m = (-bb / 2 + radpd) ** 0.333 + (-bb / 2 - radpd) ** 0.333 - bcm / (3 * acm)
+
+    dp_n = 0.6 * dp_m
+
+    return (dp_m, dp_n)
