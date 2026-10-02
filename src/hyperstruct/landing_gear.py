@@ -62,7 +62,6 @@ import numpy as np
 # from dataclasses import field
 
 
-
 # import pandas as pd
 # from matplotlib.axes import Axes
 # from matplotlib.figure import Figure
@@ -215,3 +214,62 @@ def piston_diameters(
     dp_n = 0.6 * dp_m
 
     return (dp_m, dp_n)
+
+
+def wtt_weights(
+    od_m: float, od_n: float, w_m: float, w_n: float, ws_m: float, ws_n: float
+) -> Tuple[float, float]:
+    """Wheel, Tire, and Tube weights.
+
+    The wheel, tire, and tube weights are calculated from the
+    width and diameter of the wheels. These are statistical
+    methods. The original data source is unknown.
+
+    45% of the wheel, tire, and tube weight is in the wheels;
+    therefore the total wheel, tire, and tube weights can be computed.
+
+    Args:
+        od_m (float): outer diameter of the main tires
+        od_n (float): outer diameter of the nose tire(s)
+        w_m (float): width of the main tires
+        w_n (float): width of the nose tire(s)
+        ws_m (float): wheels per strut on main gear
+        ws_n (float): wheels per strut on nose gear
+
+    Returns:
+        Tuple[Tuple[float, float], Tuple[float, float]]: Main and Nose gear tuples
+        containing the wheel and tube/tire weights, respectively.
+        `((MLG_wheel, MLG_tubetire), (NLG_wheel, NLG_tubetire))`
+    """
+    # Weight per wheel of main gear (wheel, tire, and tube)
+    wtt_m = 0.425 * od_m * w_m + 0.00023 * ((od_m * w_m) / 100) ** 7
+    # Weight per wheel of nose gear (wheel, tire, and tube)
+    wtt_n = 0.4 * od_n * w_n + 0.00024 * ((od_n * w_n) / 100) ** 8
+
+    # Assume 45% is the wheel
+    # The weight *per aircraft* of main and nose wheels
+    wheel_m = 0.45 * ws_m * wtt_m**2
+    wheel_n = 0.45 * ws_n * wtt_n
+
+    # The weight *per aircraft* of main and nose tube+tires
+    tt_m = 1.222 * wheel_m
+    tt_n = 1.222 * wheel_n
+
+    return ((wheel_m, tt_m), (wheel_n, tt_n))
+
+
+def brake_weight(grwt_to: float, vl_to: float) -> float:
+    """Brake Weights.
+
+    The weight of brakes per aircraft is calculated via statistical
+    correlation to the takeoff weight, and landing speed.
+
+    Args:
+        grwt_to (float): gross weight at takeoff
+        vl_to (float): landing speed at takeoff weight
+
+    Returns:
+        float: total weight of brakes on the aircraft
+    """
+    brakes = 0.010783 * grwt_to * vl_to**2 * 0.00000408
+    return brakes
