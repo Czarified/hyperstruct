@@ -273,3 +273,93 @@ def brake_weight(grwt_to: float, vl_to: float) -> float:
     """
     brakes = 0.010783 * grwt_to * vl_to**2 * 0.00000408
     return brakes
+
+
+def rotating_inertia(
+    od_m: float, tt_m: float, w_m: float, brakes: float, wheel_m: float, strut_m: float
+) -> float:
+    """Polar mass moment of inertia for main gear.
+
+    The inertia for the main gear wheels, tires, tubes, and brakes is calculated
+    from the wheel, tire, tube, and brake weights and the tire dimensions.
+
+    Args:
+        od_m (float): outer diameter of the main gear tires
+        tt_m (float): weight per aircraft of main gear tube/tires
+        w_m (float): width of main gear tires
+        brakes (float): total weight of the brakes on the aircraft
+        wheel_m (float): weight per aircraft of main gear wheels
+        strut_m (float): number of main gear struts
+
+    Returns:
+        float: inertia per strut of main gear (slug-ft2)
+    """
+    g = 32.172
+    iw_m = (
+        (od_m / (12 * 2.52)) ** 2 * tt_m
+        + ((od_m - 1.818 * w_m) / (12 * 2.5)) ** 2 * (0.65 * brakes + wheel_m)
+    ) / (strut_m * g)
+
+    return iw_m
+
+
+def strut_loads(
+    vf: float,
+    df: float,
+    sf: float,
+    theta_1: float,
+    theta_2: float,
+    is_main: bool = True,
+) -> Tuple[float, float, float]:
+    """Axial and Normal strut loads.
+
+    This function calculates the axial and normal strut loads
+    based on the ground reactions at the wheels, and strut
+    angles. The normal load is the resultant shear load on the strut.
+
+    Args:
+        vf (float): vertical force from the ground reaction
+        df (float): drag force from the ground reaction
+        sf (float): side force from the ground reaction
+        theta_1 (float): fore-aft angle of strut, radians
+        theta_2 (float): lateral angle of strut, radians
+        is_main (bool): if the gear in question is main or nose. Defaults to True (main gear).
+
+    Returns:
+        Tuple[float, float, float]: resultant load, axial load, and normal load
+    """
+    rload = np.sqrt(vf**2 + df**2 + sf**2)
+
+    # Direction cosines of the resultant load
+    crv = vf / rload
+    crfa = df / rload
+    crl = sf / rload
+
+    if is_main:
+        # Direction cosines of the main gear struts.
+        # Cosine of angle between strut and vertical
+        csv = np.cos(
+            np.arctan(np.cos(theta_1) ** (-2) + np.cos(theta_2) ** (-2) - 2) ** 0.5
+        )
+        # Cosine of angle between strut and fore-aft
+        csfa = np.cos(
+            np.arctan(np.sin(theta_1) ** (-2) + np.cos(theta_2) ** (-2) - 2) ** 0.5
+        )
+        # Cosine of angle between strut and lateral
+        # Is this one actually the same as csv? The manual repeats the same formula.
+        csl = np.cos(
+            np.arctan(np.cos(theta_1) ** (-2) + np.cos(theta_2) ** (-2) - 2) ** 0.5
+        )
+    else:
+        # Direction cosines of the nose gear struts.
+        csv = np.cos(theta_1)
+        csfa = np.sin(theta_2)
+        csl = 0
+
+    # The combined angle between the resultant load and the strut.
+    theta = np.arccos(csv * crv + csfa * crfa + csl * crl)
+
+    aload = rload * np.cos(theta)
+    pload = rload * np.sin(theta)
+
+    return (rload, aload, pload)
