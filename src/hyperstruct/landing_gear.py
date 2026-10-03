@@ -86,10 +86,9 @@ class GroundLoads:
     """Ground Loads base class."""
 
     name: str
-    lcid: float
-    vert: float
-    drag: float
-    side: float
+    lcid: int
+    main: dict
+    nose: dict
 
 
 #
@@ -363,3 +362,84 @@ def strut_loads(
     pload = rload * np.sin(theta)
 
     return (rload, aload, pload)
+
+
+# Landing and Ground Loads Methods
+# ---------------------------------
+# This section has all the unique ground loads (2-pt, spinup, springback,
+# braked roll, drift, unsymmetric braking, towing, and turning).
+
+# The ground reactions on the wheels (VF, DF, and SF) for each load condition are
+# determined in accordance with the procedure outlined in MIL-A-008862. After
+# the loads have been determined, the program then - except for the spring-back
+# condition - uses the method described in the `strut_loads` function to find
+# the axial and normal components.
+
+
+def two_point_landing(
+    ng_to: float,
+    ng_l: float,
+    cl_w: float,
+    grwt_to: float,
+    grwt_l: float,
+    a_to: float,
+    a_l: float,
+    dist: float,
+    dwt: float = 0.0,
+) -> Tuple[GroundLoads, GroundLoads]:
+    """2-PT Vert Landing.
+
+    The vertical load on the wheels at the 2-pt landing condition is the
+    maximum vertical load. The nose gear load is determined as a ratio of
+    the main gear load. The landing loads are determined at both takeoff
+    and landing vehicle weights. The drag load is set to one quarter of
+    the vertical load. The side load is assumed to be zero.
+
+    Args:
+        ng_to (float): load factor at takeoff
+        ng_l (float): load factor at landing
+        cl_w (float): wing lift coefficient
+        grwt_to (float): gross weight at takeoff
+        grwt_l (float): gross weight at landing
+        a_to (float): distance from CG to main gear, at takeoff
+        a_l (float): distance from CG to main gear, at landing
+        dist (float): distance from main to nose
+        dwt (float): aborted takeoff delta weight. Defaults to 0.
+
+    Returns:
+        Tuple: Load collectors for takeoff and landing weights
+    """
+    # Maximum vertical load on main gear for takeoff and landing
+    vmxmg_to = (1.5 * (ng_to - cl_w) * (grwt_to - dwt)) / 2
+    vmxmg_l = (1.5 * (ng_l - cl_w) * (grwt_l)) / 2
+    # Drag force
+    dmxmg_to = 0.25 * vmxmg_to
+    dmxmg_l = 0.25 * vmxmg_l
+    # Side force
+    smxmg_to = 0
+    smxmg_l = 0
+
+    # Maximum vertical loads on the nose gear
+    vmxng_to = 2 * vmxmg_to * (a_to / dist)
+    vmxng_l = 2 * vmxmg_l * (a_l / dist)
+    # Drag force
+    dmxng_to = 0.25 * vmxng_to
+    dmxng_l = 0.25 * vmxng_l
+    # Side force
+    smxng_to = 0
+    smxng_l = 0
+
+    takeoff = GroundLoads(
+        name=f"2-PT Landing, Aborted TO, W={grwt_to:.0f}lbs",
+        lcid=101,
+        main={"vf": vmxmg_to, "df": dmxmg_to, "sf": smxmg_to},
+        nose={"vf": vmxng_to, "df": dmxng_to, "sf": smxng_to},
+    )
+    landing = GroundLoads(
+        name=f"2-PT Landing, W={grwt_l:.0f}lbs",
+        lcid=102,
+        main={"vf": vmxmg_l, "df": dmxmg_l, "sf": smxmg_l},
+        nose={"vf": vmxng_l, "df": dmxng_l, "sf": smxng_l},
+    )
+
+    return (takeoff, landing)
