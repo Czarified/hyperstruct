@@ -275,8 +275,13 @@ def brake_weight(grwt_to: float, vl_to: float) -> float:
 
 
 def rotating_inertia(
-    od_m: float, tt_m: float, w_m: float, brakes: float, wheel_m: float, strut_m: float
-) -> float:
+    od_m: float, od_n: float,
+    tt_m: float, tt_n: float,
+    w_m: float, w_n: float,
+    brakes: float, 
+    wheel_m: float, wheel_n: float, 
+    strut_m: float,
+) -> Tuple[float, float]:
     """Polar mass moment of inertia for main gear.
 
     The inertia for the main gear wheels, tires, tubes, and brakes is calculated
@@ -284,14 +289,18 @@ def rotating_inertia(
 
     Args:
         od_m (float): outer diameter of the main gear tires
+        od_n (float): outer diameter of the nose gear tires
         tt_m (float): weight per aircraft of main gear tube/tires
+        tt_n (float): weight per aircraft of nose gear tube/tires
         w_m (float): width of main gear tires
+        w_n (float): width of nose gear tires
         brakes (float): total weight of the brakes on the aircraft
         wheel_m (float): weight per aircraft of main gear wheels
+        wheel_n (float): weight per aircraft of nose gear wheels
         strut_m (float): number of main gear struts
 
     Returns:
-        float: inertia per strut of main gear (slug-ft2)
+        Tuple: inertia per strut of main gear, nose gear (slug-ft2)
     """
     g = 32.172
     iw_m = (
@@ -443,3 +452,43 @@ def two_point_landing(
     )
 
     return (takeoff, landing)
+
+def spinup(
+    od_n: float,
+    tt_n: float,
+    w_n: float,
+    wheel_n: float,
+    ss: float,
+    ng: float,
+    streff: float,
+    cl_w: float,
+    vl: float,
+    tv: float,
+    vmx: float
+) -> GroundLoads:
+    """Spinup Load Condition.
+
+    The spinup loads are determined for both the main and nose 
+    gears at both the takeoff and landing weights. First, the inertia
+    of the gear wheels/tires/tubes/brakes is determined. Then, the 
+    time to develop the spinup vertical reaction is computed. Next, 
+    the time for the wheel circumferential velocity to reach ground 
+    velocity is computed. Finally, vertical loads are determined,
+    drag loads are set at 55% of vertical, and zero side load is assumed.
+
+    Args:
+        od_n (float): _description_
+        tt_n (float): _description_
+        w_n (float): _description_
+        wheel_n (float): _description_
+        ss (float): _description_
+        ng (float): _description_
+        streff (float): _description_
+        cl_w (float): _description_
+        vl (float): _description_
+        tv (float): _description_
+        vmx (float): _description_
+
+    Returns:
+        GroundLoads: _description_
+    """
